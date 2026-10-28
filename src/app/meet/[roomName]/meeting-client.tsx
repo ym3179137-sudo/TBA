@@ -13,6 +13,8 @@ import {
     useRoomContext,
     useConnectionState,
     useDataChannel,
+    VideoTrack,
+    TrackReference,
 } from '@livekit/components-react';
 import { Track, ConnectionState } from 'livekit-client';
 import '@livekit/components-styles';
@@ -66,7 +68,6 @@ const useScreenRecorder = () => {
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
 
-                // Stop all tracks to release the screen share
                 if (streamRef.current) {
                     streamRef.current.getTracks().forEach((track) => track.stop());
                     streamRef.current = null;
@@ -76,7 +77,6 @@ const useScreenRecorder = () => {
             mediaRecorderRef.current.start();
             setIsRecording(true);
 
-            // Handle user stopping the share via the browser's native UI
             screenStream.getVideoTracks()[0].onended = () => {
                 stopRecording();
             };
@@ -92,7 +92,6 @@ const useScreenRecorder = () => {
         }
     };
 
-    // Cleanup if component unmounts
     useEffect(() => {
         return () => {
             if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
@@ -408,10 +407,17 @@ function RoomContent() {
                 <div className="flex-1 w-full h-full p-2 sm:p-4 flex items-center justify-center">
                     {isFocusMode && focusTrack ? (
                         <div className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden rounded-2xl">
-                            <ParticipantTile
-                                trackRef={focusTrack}
-                                className="w-full h-full [&>video]:object-contain"
-                            />
+                            {focusTrack.publication ? (
+                                <VideoTrack
+                                    trackRef={focusTrack as TrackReference}
+                                    className="w-full h-full object-contain"
+                                />
+                            ) : (
+                                <ParticipantTile
+                                    trackRef={focusTrack}
+                                    className="w-full h-full [&>video]:object-contain"
+                                />
+                            )}
 
                             {/* Overlay Canvas for Annotations & Remote Control */}
                             <canvas
@@ -433,8 +439,8 @@ function RoomContent() {
                             </div>
                         </div>
                     ) : (
-                        <GridLayout tracks={tracks} className="h-full w-full gap-4">
-                            <ParticipantTile className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 shadow-xl" />
+                        <GridLayout tracks={tracks.filter(t => t.publication !== undefined)} className="h-full w-full gap-4">
+                            <ParticipantTile className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 shadow-xl [&>video]:object-contain" />
                         </GridLayout>
                     )}
                 </div>
