@@ -1,0 +1,182 @@
+@import "tailwindcss";
+
+body {
+  background-color: #09090b;
+  color: #f4f4f5;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+*:focus {
+  outline: none !important;
+}
+
+/* =========================================
+   FORCE VIDEO TO NEVER CROP (The Fix)
+   ========================================= */
+
+/* Target the video tag directly inside any tile */
+.lk-participant-tile video,
+[data-lk-participant-tile] video {
+  object-fit: contain !important;
+  width: 84% !important;
+  height: 86% !important;
+  background-color: #000000 !important;
+}
+
+/* Make sure the tile itself has a black background so the letterbox looks clean */
+.lk-participant-tile {
+  background-color: #000000 !important;
+  border-radius: 1rem !important;
+  overflow: hidden !important;
+}
+
+/* Participant Name Tag */
+.lk-participant-name {
+  background-color: rgba(0, 0, 0, 0.6) !important;
+  color: white !important;
+  padding: 4px 12px !important;
+  border-radius: 8px !important;
+  backdrop-filter: blur(8px) !important;
+  font-weight: 500 !important;
+  margin: 12px !important;
+  font-size: 0.75rem !important;
+  z-index: 10;
+}
+
+/* =========================================
+   Chat Sidebar Overrides
+   ========================================= */
+.livekit-chat-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #09090b !important;
+}
+
+.livekit-chat-container .lk-chat {
+  background-color: transparent !important;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border: none !important;
+}
+
+.livekit-chat-container .lk-chat-header {
+  display: none !important;
+}
+
+.livekit-chat-container .lk-chat-messages {
+  padding: 1rem !important;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem !important;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.lk-chat-message .lk-message-body {
+  background-color: #27272a !important;
+  color: #e4e4e7 !important;
+  padding: 10px 14px !important;
+  border-radius: 12px !important;
+  border-bottom-left-radius: 2px !important;
+  font-size: 0.875rem !important;
+  line-height: 1.4 !important;
+  max-width: 85%;
+  word-wrap: break-word;
+}
+
+.lk-chat-message.lk-own-message .lk-message-body {
+  background-color: #4f46e5 !important;
+  color: white !important;
+  align-self: flex-end;
+  border-bottom-left-radius: 12px !important;
+  border-bottom-right-radius: 2px !important;
+}
+
+.lk-chat-message .lk-participant-name {
+  color: #a1a1aa !important;
+  font-weight: 500 !important;
+  font-size: 0.75rem !important;
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 0 4px 4px !important;
+  backdrop-filter: none !important;
+}
+
+.livekit-chat-container .lk-chat-form {
+  border-top: 1px solid #27272a !important;
+  background-color: #09090b !important;
+  padding: 12px !important;
+  margin: 0 !important;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.livekit-chat-container .lk-chat-form .lk-chat-entry,
+.livekit-chat-container .lk-chat-form input[type="text"],
+.livekit-chat-container input {
+  background-color: #18181b !important;
+  border: 1px solid #3f3f46 !important;
+  color: #f4f4f5 !important;
+  border-radius: 10px !important;
+  padding: 10px 14px !important;
+  font-size: 0.875rem !important;
+  flex: 1;
+  transition: border-color 0.2s;
+  box-shadow: none !important;
+}
+
+.livekit-chat-container input:focus {
+  border-color: #6366f1 !important;
+}
+
+.livekit-chat-container input::placeholder {
+  color: #71717a !important;
+}
+
+.livekit-chat-container button[type="submit"],
+.livekit-chat-container .lk-chat-form-button {
+  background-color: #4f46e5 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 10px !important;
+  padding: 10px 16px !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.livekit-chat-container button[type="submit"]:hover,
+.livekit-chat-container .lk-chat-form-button:hover {
+  background-color: #4338ca !important;
+}
+
+/* =========================================
+   Control Bar Reset
+   ========================================= */
+.lk-control-bar {
+  background-color: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  gap: 4px !important;
+}
+
+.lk-button {
+  background-color: #27272a !important;
+  color: #f4f4f5 !important;
+  border-radius: 10px !important;
+  transition: all 0.2s;
+}
+
+.lk-button:hover {
+  background-color: #3f3f46 !important;
+}
+
+.lk-button[data-lk-active="true"] {
+  background-color: #4f46e5 !important;
+}
