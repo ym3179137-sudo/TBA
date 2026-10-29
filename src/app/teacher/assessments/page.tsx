@@ -4,23 +4,32 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createAssignment } from "@/app/actions/assignments";
+import { createClient } from "@/lib/supabase/client"; // 🚨 Import Supabase
 import {
     ArrowLeft, Save, Lock, Unlock, Plus, Trash2,
-    FileText, ClipboardList, Loader2, AlertTriangle
+    FileText, ClipboardList, Loader2, AlertTriangle,
+    UploadCloud, Link as LinkIcon, CheckCircle
 } from "lucide-react";
 
 export default function TeacherAssignmentsPage() {
     const router = useRouter();
+    const supabase = createClient();
 
     const [title, setTitle] = useState("");
     const [type, setType] = useState<"doc" | "form">("form");
     const [targetGrade, setTargetGrade] = useState("KG1");
     const [lockMode, setLockMode] = useState(false);
 
+    // Form Builder State
     const [questions, setQuestions] = useState<any[]>([
         { id: "q1", type: "short_text", label: "Question 1", required: true }
     ]);
 
+    // 🚨 Doc Mode State (Upload/Drive Link)
+    const [docUrl, setDocUrl] = useState("");
+    const [uploading, setUploading] = useState(false);
+
+    // UI State
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState(false);
@@ -40,6 +49,38 @@ export default function TeacherAssignmentsPage() {
         setQuestions(newQ);
     };
 
+    // 🚨 Handle File Upload to Supabase
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setUploading(true);
+        setError("");
+
+        try {
+            // Upload to Supabase Storage (using the same bucket as PPTX)
+            const fileExt = file.name.split('.').pop();
+            const fileName = `assignment-${Date.now()}.${fileExt}`;
+
+            const { data, error: uploadError } = await supabase.storage
+                .from('presentations') // Ensure this bucket exists and is public
+                .upload(`assignments/${fileName}`, file);
+
+            if (uploadError) throw uploadError;
+
+            // Get Public URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('presentations')
+                .getPublicUrl(`assignments/${fileName}`);
+
+            setDocUrl(publicUrl);
+        } catch (err: any) {
+            setError("Failed to upload file. " + err.message);
+        } finally {
+            setUploading(false);
+        }
+    };
+
     const handleCreate = async () => {
         if (!title.trim()) return setError("Please enter an assignment title.");
 
@@ -48,14 +89,20 @@ export default function TeacherAssignmentsPage() {
         setSuccess(false);
 
         try {
+            // Build the settings object
+            const settingsPayload: any = { lockMode };
+
+            if (type === 'form') {
+                settingsPayload.questions = questions;
+            } else {
+                settingsPayload.docUrl = docUrl; // Pass the uploaded file or Drive link
+            }
+
             await createAssignment({
                 title,
                 type,
                 target_grade: targetGrade,
-                settings: {
-                    lockMode,
-                    questions: type === 'form' ? questions : []
-                }
+                settings: settingsPayload
             });
 
             setSuccess(true);
@@ -150,6 +197,7 @@ export default function TeacherAssignmentsPage() {
                         </label>
                     </div>
 
+                    {/* FORM MODE */}
                     {type === "form" && (
                         <div className="space-y-4 pt-6 border-t border-slate-800">
                             <h2 className="text-xl font-bold text-white mb-4">Form Questions</h2>
@@ -220,20 +268,57 @@ export default function TeacherAssignmentsPage() {
                         </div>
                     )}
 
+                    {/* 🚨 DOC MODE (Upload / Google Drive) */}
                     {type === "doc" && (
-                        <div className="pt-6 border-t border-slate-800 text-center py-10">
-                            <FileText className="w-16 h-16 text-blue-500 mx-auto mb-4 opacity-50" />
-                            <h3 className="text-xl font-bold text-white mb-2">Google Doc Mode</h3>
-                            <p className="text-slate-400 max-w-md mx-auto">
-                                Students will get a blank, distraction-free text editor to write their essay or short answers.
-                                {lockMode ? " Paste tracking and tab-switching alerts are ACTIVE." : " Lock mode is off."}
-                            </p>
+                        <div className="pt-6 border-t border-slate-800 space-y-6">
+                            <div className="text-center py-6">
+                                <FileText className="w-16 h-16 text-blue-500 mx-auto mb-4 opacity-50" />
+                                <h3 className="text-xl font-bold text-white mb-2">Source Document (Optional)</h3>
+                                <p className="text-slate-400 max-w-md mx-auto text-sm">
+                                    Upload a Word/PDF file or paste a Google Drive link. The student will see this document alongside a blank text editor to write their answer.
+                                </p>
+                            </div>
+
+                            <div className="grid md:grid-cols-2 gap-6">
+                                {/* Upload Word/PDF */}
+                                <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 flex flex-col items-center justify-center text-center">
+                                    <UploadCloud className="w-8 h-8 text-emerald-400 mb-3" />
+                                    <p className="font-bold text-white mb-2">Upload File</p>
+                                    <p className="text-xs text-slate-500 mb-4">Word (.docx) or PDF</p>
+                                    <label className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition-all">
+                                        {uploading ? "Uploading..." : "Choose File"}
+                                        <input type="file" accept=".docx, .pdf" onChange={handleFileUpload} className="hidden" />
+                                    </label>
+                                </div>
+
+                                {/* Paste Google Drive Link */}
+                                <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 flex flex-col justify-center">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <LinkIcon className="w-5 h-5 text-amber-400" />
+                                        <p className="font-bold text-white">Google Drive Link</p>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        value={docUrl}
+                                        onChange={e => setDocUrl(e.target.value)}
+                                        placeholder="https://docs.google.com/..."
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:border-amber-500 outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            {docUrl && (
+                                <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-xl flex items-center gap-3">
+                                    <CheckCircle className="text-emerald-400" />
+                                    <p className="text-emerald-400 text-sm font-bold truncate">Document attached: {docUrl}</p>
+                                </div>
+                            )}
                         </div>
                     )}
 
                     <button
                         onClick={handleCreate}
-                        disabled={loading}
+                        disabled={loading || uploading}
                         className="w-full mt-8 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-extrabold text-lg py-4 rounded-xl shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                     >
                         {loading ? <Loader2 className="animate-spin" /> : <Save size={20} />}
