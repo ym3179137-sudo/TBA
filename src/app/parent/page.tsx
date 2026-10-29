@@ -3,8 +3,15 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { UserPlus, LogOut, CheckCircle, Clock, ShieldCheck, Trash2 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
+import {
+    UserPlus, LogOut, CheckCircle, Clock, Trash2,
+    Trophy, BookOpen, MessageSquare, X, BarChart2
+} from "lucide-react";
+
+// 🚨 Import your logo
+import logoImg from "@/pic/FAV-ICO2.png";
 
 export default function ParentPage() {
     const [children, setChildren] = useState<any[]>([]);
@@ -13,6 +20,9 @@ export default function ParentPage() {
     const [className, setClassName] = useState("KG1");
     const [pin, setPin] = useState("");
     const [loading, setLoading] = useState(false);
+
+    // 🚨 State for the Grade Modal
+    const [selectedChild, setSelectedChild] = useState<any | null>(null);
 
     const supabase = createClient();
     const router = useRouter();
@@ -61,7 +71,7 @@ export default function ParentPage() {
     }
 
     async function handleDeleteChild(id: string) {
-        if (!confirm("Are you sure you want to delete this child?")) return;
+        if (!confirm("Are you sure you want to delete this child? This action cannot be undone.")) return;
         const { error } = await supabase.from("children").delete().eq("id", id);
         if (error) alert(error.message);
         else fetchChildren();
@@ -75,43 +85,53 @@ export default function ParentPage() {
     }
 
     return (
-        <main className="min-h-screen bg-slate-50 text-slate-900">
-            <nav className="bg-white border-b px-8 py-4 flex justify-between items-center shadow-sm">
-                <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center text-white font-bold">P</div>
-                    <span className="font-bold text-lg">Parent Portal</span>
+        <div className="min-h-screen bg-slate-950 text-slate-200 font-sans relative overflow-hidden">
+            {/* 🌌 AMBIENT BACKGROUND GLOWS */}
+            <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-emerald-600/10 blur-[120px] rounded-full pointer-events-none" />
+            <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/10 blur-[120px] rounded-full pointer-events-none" />
+
+            {/* Navbar */}
+            <nav className="relative z-10 border-b border-slate-800 bg-slate-900/50 backdrop-blur-xl px-8 py-4 flex justify-between items-center sticky top-0">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center p-1.5 shadow-lg shadow-emerald-500/20">
+                        <Image src={logoImg} alt="Logo" className="object-contain w-full h-full" />
+                    </div>
+                    <span className="text-xl font-extrabold text-white tracking-tight">Parent Portal</span>
                 </div>
-                <div className="flex items-center gap-4">
-                    <Link href="/dashboard" className="text-sm font-medium text-slate-600 hover:text-slate-900">Home</Link>
-                    <button onClick={handleSignOut} className="flex items-center gap-2 text-sm font-medium text-red-600 hover:text-red-700 bg-red-50 px-3 py-1.5 rounded-lg transition-colors">
+                <div className="flex items-center gap-6">
+                    <Link href="/dashboard" className="text-sm font-bold text-slate-300 hover:text-white transition-colors">
+                        Dashboard
+                    </Link>
+                    <button onClick={handleSignOut} className="flex items-center gap-2 text-sm font-bold text-red-400 hover:text-red-300 bg-red-500/10 px-4 py-2 rounded-xl border border-red-500/20 transition-all">
                         <LogOut className="w-4 h-4" /> Sign out
                     </button>
                 </div>
             </nav>
 
-            <div className="max-w-6xl mx-auto p-8">
-                <div className="grid md:grid-cols-2 gap-8">
+            <div className="relative z-10 max-w-7xl mx-auto p-8">
+                <div className="grid lg:grid-cols-3 gap-8">
 
-                    <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 h-fit">
-                        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-                            <UserPlus className="text-emerald-500 w-6 h-6" /> Add a Child
+                    {/* ADD CHILD FORM */}
+                    <div className="lg:col-span-1 bg-slate-900/80 backdrop-blur-xl p-8 rounded-[2rem] border border-slate-800 shadow-2xl h-fit">
+                        <h2 className="text-2xl font-extrabold mb-6 flex items-center gap-2 text-white">
+                            <UserPlus className="text-emerald-400 w-6 h-6" /> Add a Child
                         </h2>
 
                         <form onSubmit={handleAddChild} className="space-y-5">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">First Name</label>
-                                    <input placeholder="e.g., Leo" value={firstName} onChange={e => setFirstName(e.target.value)} required className="w-full border rounded-xl px-4 py-3 bg-slate-50" />
+                                    <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">First Name</label>
+                                    <input placeholder="Leo" value={firstName} onChange={e => setFirstName(e.target.value)} required className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all" />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Last Name</label>
-                                    <input placeholder="e.g., Smith" value={lastName} onChange={e => setLastName(e.target.value)} required className="w-full border rounded-xl px-4 py-3 bg-slate-50" />
+                                    <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Last Name</label>
+                                    <input placeholder="Smith" value={lastName} onChange={e => setLastName(e.target.value)} required className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all" />
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Class Level</label>
-                                <select value={className} onChange={e => setClassName(e.target.value)} className="w-full border rounded-xl px-4 py-3 bg-slate-50">
+                                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Class Level</label>
+                                <select value={className} onChange={e => setClassName(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-all appearance-none cursor-pointer">
                                     <option value="Pre-K">Pre-K</option>
                                     <option value="KG1">KG1</option>
                                     <option value="KG2">KG2</option>
@@ -119,46 +139,59 @@ export default function ParentPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">4-Digit Student PIN</label>
-                                <input type="text" maxLength={4} placeholder="e.g., 1234" value={pin} onChange={e => setPin(e.target.value)} required className="w-full border rounded-xl px-4 py-3 bg-slate-50 text-center tracking-[0.5em] font-bold text-lg" />
+                                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">4-Digit Student PIN</label>
+                                <input type="text" maxLength={4} placeholder="••••" value={pin} onChange={e => setPin(e.target.value)} required className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-center tracking-[0.5em] font-extrabold text-lg transition-all" />
                             </div>
 
-                            <button type="submit" disabled={loading} className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl shadow-md disabled:opacity-50 mt-4">
+                            <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold py-3 rounded-xl shadow-lg shadow-emerald-500/25 disabled:opacity-50 mt-4 transition-all">
                                 {loading ? "Adding..." : "Add Child"}
                             </button>
                         </form>
                     </div>
 
-                    <div>
-                        <h2 className="text-2xl font-bold mb-6">My Children</h2>
+                    {/* MY CHILDREN LIST */}
+                    <div className="lg:col-span-2">
+                        <h2 className="text-2xl font-extrabold mb-6 text-white">My Children</h2>
                         {children.length === 0 ? (
-                            <div className="bg-white p-8 rounded-3xl shadow-sm border text-center">
-                                <p className="text-slate-500">No children added yet.</p>
+                            <div className="bg-slate-900/50 p-12 rounded-[2rem] border border-slate-800 text-center backdrop-blur-md">
+                                <p className="text-slate-400 text-lg">No children added yet. Use the form to add your first child.</p>
                             </div>
                         ) : (
-                            <div className="space-y-4">
+                            <div className="grid md:grid-cols-2 gap-4">
                                 {children.map((child) => (
-                                    <div key={child.id} className="bg-white p-6 rounded-2xl shadow-sm border flex justify-between items-center">
-                                        <div>
-                                            <p className="font-bold text-lg text-slate-900">{child.full_name}</p>
-                                            <p className="text-sm text-slate-500 font-medium mt-1">Class: {child.class_name || "N/A"}</p>
-                                        </div>
-
-                                        <div className="flex items-center gap-3">
-                                            {child.is_approved ? (
-                                                <span className="flex items-center gap-1.5 text-sm font-bold text-emerald-700 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-100">
-                                                    <CheckCircle className="w-4 h-4" /> Approved
-                                                </span>
-                                            ) : (
-                                                <span className="flex items-center gap-1.5 text-sm font-bold text-amber-700 bg-amber-50 px-4 py-2 rounded-full border border-amber-100">
-                                                    <Clock className="w-4 h-4" /> Pending Admin
-                                                </span>
-                                            )}
-
-                                            {/* 🗑️ DELETE BUTTON */}
-                                            <button onClick={() => handleDeleteChild(child.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors">
+                                    <div key={child.id} className="group bg-slate-900/80 backdrop-blur-xl p-6 rounded-2xl border border-slate-800 shadow-xl hover:border-slate-600 transition-all flex flex-col justify-between">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div>
+                                                <p className="font-extrabold text-xl text-white">{child.full_name}</p>
+                                                <p className="text-sm text-slate-400 font-medium mt-1">{child.class_name || "N/A"}</p>
+                                            </div>
+                                            <button onClick={() => handleDeleteChild(child.id)} className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all">
                                                 <Trash2 className="w-5 h-5" />
                                             </button>
+                                        </div>
+
+                                        {/* 🚨 THE HOVER BUTTON */}
+                                        <div className="mt-4">
+                                            {child.is_approved ? (
+                                                <button
+                                                    onClick={() => setSelectedChild(child)}
+                                                    className="w-full relative overflow-hidden bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold px-4 py-3 rounded-xl transition-all group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-500 group-hover:shadow-lg group-hover:shadow-indigo-500/25 flex items-center justify-center"
+                                                >
+                                                    {/* Default State */}
+                                                    <span className="flex items-center gap-2 group-hover:hidden transition-all">
+                                                        <CheckCircle className="w-5 h-5" /> Approved
+                                                    </span>
+
+                                                    {/* Hover State */}
+                                                    <span className="hidden group-hover:flex items-center gap-2 transition-all">
+                                                        <BarChart2 className="w-5 h-5" /> View Grades
+                                                    </span>
+                                                </button>
+                                            ) : (
+                                                <div className="w-full flex items-center justify-center gap-2 text-amber-400 bg-amber-500/10 border border-amber-500/30 font-bold px-4 py-3 rounded-xl">
+                                                    <Clock className="w-5 h-5" /> Pending Admin Approval
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
@@ -168,6 +201,100 @@ export default function ParentPage() {
 
                 </div>
             </div>
-        </main>
+
+            {/* 🚨 GRADE MODAL OVERLAY */}
+            {selectedChild && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+                    <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-[2rem] shadow-2xl overflow-hidden relative animate-in fade-in zoom-in duration-200">
+
+                        {/* Modal Header */}
+                        <div className="bg-slate-800/50 p-6 border-b border-slate-700 flex justify-between items-center">
+                            <div>
+                                <h2 className="text-2xl font-extrabold text-white">{selectedChild.full_name}'s Report</h2>
+                                <p className="text-slate-400">{selectedChild.class_name} • Academic Overview</p>
+                            </div>
+                            <button onClick={() => setSelectedChild(null)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-all">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        {/* Modal Content */}
+                        <div className="p-6 max-h-[70vh] overflow-y-auto space-y-6">
+
+                            {/* 1. Competition / Ranking */}
+                            <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 p-6 rounded-2xl flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-amber-500/20 rounded-full flex items-center justify-center">
+                                        <Trophy className="w-6 h-6 text-amber-400" />
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-white text-lg">Class Leaderboard</p>
+                                        <p className="text-sm text-slate-400">Compared to other students in {selectedChild.class_name}</p>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-3xl font-extrabold text-amber-400">#3</p>
+                                    <p className="text-xs text-amber-500 font-bold uppercase tracking-wider">Out of 24</p>
+                                </div>
+                            </div>
+
+                            {/* 2. Assignments & Answers */}
+                            <div>
+                                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                                    <BookOpen className="w-5 h-5 text-indigo-400" /> Recent Assignments
+                                </h3>
+                                <div className="space-y-3">
+                                    {/* Mock Data for now - You can replace this with real DB data later */}
+                                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
+                                        <div>
+                                            <p className="font-bold text-white">Math Quiz: Addition</p>
+                                            <p className="text-sm text-slate-400">10 questions</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-emerald-400 font-bold text-lg">90%</span>
+                                            <p className="text-xs text-slate-500">Grade: A</p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
+                                        <div>
+                                            <p className="font-bold text-white">Science: Animals</p>
+                                            <p className="text-sm text-slate-400">Matching game</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-emerald-400 font-bold text-lg">100%</span>
+                                            <p className="text-xs text-slate-500">Grade: A+</p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
+                                        <div>
+                                            <p className="font-bold text-white">English: Spelling</p>
+                                            <p className="text-sm text-slate-400">Fill in the blanks</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-amber-400 font-bold text-lg">75%</span>
+                                            <p className="text-xs text-slate-500">Grade: B</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 3. Teacher Feedback */}
+                            <div>
+                                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                                    <MessageSquare className="w-5 h-5 text-pink-400" /> Teacher Feedback
+                                </h3>
+                                <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 relative">
+                                    <div className="absolute top-0 left-0 w-1 h-full bg-pink-500 rounded-l-xl"></div>
+                                    <p className="text-slate-300 italic">"Yassin has been doing an amazing job! He is very active in class and always eager to answer questions. He needs a little more practice with spelling, but overall his progress is fantastic."</p>
+                                    <p className="text-sm text-slate-500 mt-3 font-bold">- Ms. Sarah (Class Teacher)</p>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            )}
+
+        </div>
     );
 }
