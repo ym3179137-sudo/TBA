@@ -16,7 +16,8 @@ export default function TeacherClassManager() {
 
     // New Student States
     const [newStudentName, setNewStudentName] = useState("");
-    const [newStudentGrade, setNewStudentGrade] = useState("Pre-K");
+    // 🚨 Changed to allow the teacher to type ANY class/grade name
+    const [newStudentClass, setNewStudentClass] = useState("");
     const [newStudentPin, setNewStudentPin] = useState("");
 
     const [loading, setLoading] = useState(true);
@@ -68,11 +69,11 @@ export default function TeacherClassManager() {
         fetchData();
     }
 
-    // 🚨 UPDATED: Handle existing students gracefully via the API route
+    // 🚨 UPDATED: Use the custom typed class name
     async function addNewStudent(e: React.FormEvent) {
         e.preventDefault();
-        if (!newStudentName.trim() || newStudentPin.length !== 4) {
-            return alert("Please enter a name and a 4-digit PIN.");
+        if (!newStudentName.trim() || newStudentPin.length !== 4 || !newStudentClass.trim()) {
+            return alert("Please enter a name, a class name, and a 4-digit PIN.");
         }
         setAddingStudent(true);
 
@@ -90,7 +91,7 @@ export default function TeacherClassManager() {
                 body: JSON.stringify({
                     fullName: newStudentName,
                     studentPin: newStudentPin,
-                    grade: newStudentGrade,
+                    grade: newStudentClass, // Pass the custom name here
                     teacherId: user.id
                 })
             });
@@ -102,6 +103,7 @@ export default function TeacherClassManager() {
             alert("✅ " + data.message);
             setNewStudentName("");
             setNewStudentPin("");
+            setNewStudentClass("");
             fetchData(); // Refresh the list
 
         } catch (err: any) {
@@ -170,16 +172,16 @@ export default function TeacherClassManager() {
                                     onChange={(e) => setNewStudentName(e.target.value)}
                                     className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 outline-none focus:border-emerald-500"
                                 />
-                                <select
-                                    value={newStudentGrade}
-                                    onChange={(e) => setNewStudentGrade(e.target.value)}
+
+                                {/* 🚨 FREE TEXT INPUT FOR CLASS NAME */}
+                                <input
+                                    type="text"
+                                    placeholder="Type class name (e.g. Pre-K, Lovely Students...)"
+                                    value={newStudentClass}
+                                    onChange={(e) => setNewStudentClass(e.target.value)}
                                     className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 outline-none focus:border-emerald-500"
-                                >
-                                    <option value="Pre-K">Pre-K</option>
-                                    <option value="KG1">KG1</option>
-                                    <option value="KG2">KG2</option>
-                                    <option value="Grade 1">Grade 1</option>
-                                </select>
+                                />
+
                                 <input
                                     type="text"
                                     maxLength={4}
@@ -205,7 +207,7 @@ export default function TeacherClassManager() {
                         {unassignedStudents.length > 0 && (
                             <div className="bg-amber-900/20 border border-amber-500/30 rounded-3xl p-6">
                                 <h2 className="text-xl font-bold text-amber-400 mb-4 flex items-center gap-2">
-                                    <ShieldAlert size={20} /> New Students Needing a Class
+                                    <ShieldAlert size={20} /> New Students Needing a Class Group
                                 </h2>
                                 <p className="text-sm text-amber-200 mb-4">These students are in your roster but not assigned to a specific group yet.</p>
 
@@ -217,7 +219,7 @@ export default function TeacherClassManager() {
                                                 <span className="text-xs text-slate-400">{student.class_name}</span>
                                             </div>
                                             <div className="flex flex-wrap gap-2">
-                                                {classes.length === 0 && <span className="text-xs text-amber-500">Create a class group first.</span>}
+                                                {classes.length === 0 && <span className="text-xs text-amber-500">Create a class group first to organize them.</span>}
                                                 {classes.map(cls => (
                                                     <button
                                                         key={cls.id}
@@ -236,7 +238,7 @@ export default function TeacherClassManager() {
 
                         {classes.length === 0 ? (
                             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center">
-                                <p className="text-slate-500">Create a class group first to start organizing your students.</p>
+                                <p className="text-slate-500">Create a class group on the left to start organizing your students.</p>
                             </div>
                         ) : (
                             classes.map((cls) => (
