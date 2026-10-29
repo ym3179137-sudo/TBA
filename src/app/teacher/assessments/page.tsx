@@ -29,7 +29,7 @@ export default function TeacherAssessmentsPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return router.push("/sign-in");
 
-        // 1. Fetch Custom Classes
+        // 1. Fetch Custom Classes (for mapping IDs to Names)
         const { data: classData } = await supabase
             .from("teacher_classes")
             .select("id, name")
@@ -104,7 +104,11 @@ export default function TeacherAssessmentsPage() {
                             {assignments.map(assign => {
                                 const subCount = submissions.filter(s => s.assignment_id === assign.id).length;
                                 const isSelected = selectedAssignment?.id === assign.id;
-                                const className = classes[assign.target_class_id] || "Unassigned";
+
+                                // 🚨 Grab class name from map, fallback to "Unassigned"
+                                const className = assign.target_class_id
+                                    ? classes[assign.target_class_id] || "Unknown Class"
+                                    : "Unassigned";
 
                                 return (
                                     <div
@@ -120,7 +124,9 @@ export default function TeacherAssessmentsPage() {
                                             {assign.type === 'form' ? <ClipboardList className="text-blue-400" size={20} /> : <FileText className="text-amber-400" size={20} />}
                                         </div>
                                         <div className="flex items-center gap-3 text-xs font-bold text-slate-400">
-                                            <span className="bg-slate-950 px-2 py-1 rounded-md">Class: {className}</span>
+                                            <span className={`px-2 py-1 rounded-md ${className === 'Unassigned' ? 'bg-amber-900/30 text-amber-500' : 'bg-slate-950'}`}>
+                                                Class: {className}
+                                            </span>
                                             <span className="bg-slate-950 px-2 py-1 rounded-md">{subCount} Submissions</span>
                                             {assign.settings?.lockMode ? (
                                                 <span className="text-red-400 flex items-center gap-1"><Lock size={12} /> Locked</span>
