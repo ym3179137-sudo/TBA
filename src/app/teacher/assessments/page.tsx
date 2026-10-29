@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
     ArrowLeft, FileText, ClipboardList, Lock, Unlock,
-    AlertTriangle, CheckCircle, ChevronRight, X, User
+    AlertTriangle, CheckCircle, ChevronRight, X, User, Edit
 } from "lucide-react";
 
 export default function TeacherAssessmentsPage() {
@@ -15,11 +15,20 @@ export default function TeacherAssessmentsPage() {
 
     const [assignments, setAssignments] = useState<any[]>([]);
     const [submissions, setSubmissions] = useState<any[]>([]);
-    const [classes, setClasses] = useState<Record<string, string>>({}); // Map class ID to Name
+
+    // Class mapping
+    const [classes, setClasses] = useState<Record<string, string>>({});
+    const [classesList, setClassesList] = useState<any[]>([]);
 
     const [selectedAssignment, setSelectedAssignment] = useState<any | null>(null);
     const [selectedSubmission, setSelectedSubmission] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
+
+    // 🚨 Edit Class Modal States
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [assignmentToEdit, setAssignmentToEdit] = useState<any>(null);
+    const [newClassId, setNewClassId] = useState("");
+    const [isUpdating, setIsUpdating] = useState(false);
 
     useEffect(() => {
         fetchData();
@@ -29,16 +38,17 @@ export default function TeacherAssessmentsPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return router.push("/sign-in");
 
-        // 1. Fetch Custom Classes (for mapping IDs to Names)
+        // 1. Fetch Custom Classes
         const { data: classData } = await supabase
             .from("teacher_classes")
             .select("id, name")
             .eq("teacher_id", user.id);
 
         if (classData) {
+            setClassesList(classData); // Store array for dropdown
             const classMap: Record<string, string> = {};
             classData.forEach(c => classMap[c.id] = c.name);
-            setClasses(classMap);
+            setClasses(classMap); // Store map for quick lookup
         }
 
         // 2. Fetch Teacher's Assignments
@@ -67,6 +77,32 @@ export default function TeacherAssessmentsPage() {
 
         setLoading(false);
     }
+
+    // 🚨 Handle updating the class for an old assignment
+    const handleUpdateClass = async () => {
+        if (!assignmentToEdit) return;
+        setIsUpdating(true);
+
+        const { error } = await supabase
+            .from("assignments")
+            .update({ target_class_id: newClassId || null })
+            .eq("id", assignmentToEdit.id);
+
+        setIsUpdating(false);
+
+        if (error) {
+            alert("Failed to update class: " + error.message);
+        } else {
+            setIsEditModalOpen(false);
+            fetchData(); // Refresh list to show new class name
+        }
+    };
+
+    const openEditModal = (assign: any) => {
+        setAssignmentToEdit(assign);
+        setNewClassId(assign.target_class_id || "");
+        setIsEditModalOpen(true);
+    };
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-200 p-8 font-sans flex flex-col">
@@ -105,7 +141,6 @@ export default function TeacherAssessmentsPage() {
                                 const subCount = submissions.filter(s => s.assignment_id === assign.id).length;
                                 const isSelected = selectedAssignment?.id === assign.id;
 
-                                // 🚨 Grab class name from map, fallback to "Unassigned"
                                 const className = assign.target_class_id
                                     ? classes[assign.target_class_id] || "Unknown Class"
                                     : "Unassigned";
@@ -123,11 +158,20 @@ export default function TeacherAssessmentsPage() {
                                             <h3 className="font-bold text-white text-lg">{assign.title}</h3>
                                             {assign.type === 'form' ? <ClipboardList className="text-blue-400" size={20} /> : <FileText className="text-amber-400" size={20} />}
                                         </div>
-                                        <div className="flex items-center gap-3 text-xs font-bold text-slate-400">
-                                            <span className={`px-2 py-1 rounded-md ${className === 'Unassigned' ? 'bg-amber-900/30 text-amber-500' : 'bg-slate-950'}`}>
-                                                Class: {className}
-                                            </span>
+                                        <div className="flex items-center gap-2 text-xs font-bold text-slate-400 flex-wrap">
+
+                                            {/* 🚨 CLICKABLE BADGE TO EDIT CLASS */}
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); openEditModal(assign); }}
+                                                className={`px-2 py-1 rounded-md flex items-center gap-1 hover:bg-slate-700 transition-colors ${className === 'Unassigned' ? 'bg-amber-900/30 text-amber-500 border border-amber-500/30' : 'bg-slate-950 border border-slate-700'
+                                                    }`}
+                                                title="Click to change class"
+                                            >
+                                                Class: {className} <Edit size={12} />
+                                            </button>
+
                                             <span className="bg-slate-950 px-2 py-1 rounded-md">{subCount} Submissions</span>
+
                                             {assign.settings?.lockMode ? (
                                                 <span className="text-red-400 flex items-center gap-1"><Lock size={12} /> Locked</span>
                                             ) : (
@@ -257,6 +301,49 @@ export default function TeacherAssessmentsPage() {
                                 </div>
                             )}
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 🚨 EDIT CLASS MODAL */}
+            {isEditModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+                    <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-3xl shadow-2xl p-8 relative">
+                        <button
+                            onClick={() => setIsEditModalOpen(false)}
+                            className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-800 p-2 rounded-xl"
+                        >
+                            <X size={20} />
+                        </button>
+
+                        <h2 className="text-2xl font-extrabold text-white mb-2 flex items-center gap-2">
+                            <Edit className="text-emerald-400" /> Change Class
+                        </h2>
+                        <p className="text-slate-400 text-sm mb-6">
+                            Move <strong>{assignmentToEdit?.title}</strong> to a different class.
+                        </p>
+
+                        <div className="space-y-4 mb-8">
+                            <label className="block text-sm font-bold text-slate-400">Select a Class</label>
+                            <select
+                                value={newClassId}
+                                onChange={(e) => setNewClassId(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:border-emerald-500 outline-none appearance-none"
+                            >
+                                <option value="">Unassigned (Remove from class)</option>
+                                {classesList.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <button
+                            onClick={handleUpdateClass}
+                            disabled={isUpdating}
+                            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-50"
+                        >
+                            {isUpdating ? "Saving..." : "Save Changes"}
+                        </button>
                     </div>
                 </div>
             )}
