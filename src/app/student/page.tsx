@@ -2,27 +2,21 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { cookies } from "next/headers";
-import { Gamepad2, Box, BookOpen, Video, LogOut } from "lucide-react";
+import { Gamepad2, Box, BookOpen, Video, LogOut, FileText } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 
-// 🚨 IMPORT YOUR BACKGROUND IMAGE
+// 🚨 IMPORT YOUR IMAGES
 import studentBg from "@/pic/100a5ec1-5f72-4fa8-bf39-6a9868de1337.jpg";
+import logoImg from "@/pic/FAV-ICO2.png";
 
 export default async function StudentDashboard() {
     const cookieStore = await cookies();
-
-    // 🛡️ READ THE STUDENT COOKIE SET BY THE LOGIN API
     const studentId = cookieStore.get("student_id")?.value;
     const studentName = cookieStore.get("student_name")?.value;
 
-    // If there is no student cookie, kick them back to the student login (NOT the teacher login)
-    if (!studentId) {
-        redirect("/student-login");
-    }
+    if (!studentId) redirect("/student-login");
 
     const supabase = await createClient();
-
-    // Fetch their specific data from the database using their ID
     const { data: studentData } = await supabase
         .from("children")
         .select("coins, equipped_skin")
@@ -34,7 +28,7 @@ export default async function StudentDashboard() {
     return (
         <div className="min-h-screen relative flex flex-col font-sans">
 
-            {/* 🖼️ THE BACKGROUND IMAGE WRAPPER */}
+            {/* 🖼️ BACKGROUND IMAGE (NO DARK OVERLAY) */}
             <Image
                 src={studentBg}
                 alt="Student Background"
@@ -43,27 +37,24 @@ export default async function StudentDashboard() {
                 priority
             />
 
-            {/* 🌑 Dark Overlay so text is readable */}
-            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm z-0" />
-
             {/* Main Content Area */}
             <div className="relative z-10 flex flex-col min-h-screen">
 
-                {/* Navbar */}
-                <nav className="p-6 flex justify-between items-center max-w-7xl mx-auto w-full border-b border-white/10">
+                {/* Navbar (Solid dark background so text is readable) */}
+                <nav className="p-4 flex justify-between items-center max-w-7xl mx-auto w-full bg-slate-950/80 backdrop-blur-md rounded-b-3xl border-b border-white/10 shadow-2xl">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/30 p-1">
-                            <span className="font-bold text-slate-900 text-xs">TBA</span>
+                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg p-1.5 overflow-hidden">
+                            {/* 🚨 FIXED LOGO */}
+                            <Image src={logoImg} alt="Logo" className="object-contain w-full h-full" />
                         </div>
-                        <span className="text-xl font-extrabold text-white tracking-tight">Student Portal</span>
+                        <span className="text-xl font-extrabold text-white tracking-tight drop-shadow-md">Student Portal</span>
                     </div>
 
                     <div className="flex items-center gap-4">
-                        <div className="bg-amber-500/20 text-amber-300 font-bold px-4 py-2 rounded-xl border border-amber-500/30">
-                            {coins} 🪙 Coins
+                        <div className="bg-amber-500/90 text-slate-950 font-extrabold px-4 py-2 rounded-xl shadow-lg border border-amber-400">
+                            {coins} 🪙
                         </div>
 
-                        {/* Sign Out Button (Clears the cookie) */}
                         <form action={async () => {
                             "use server";
                             const cookieStore = await cookies();
@@ -71,7 +62,7 @@ export default async function StudentDashboard() {
                             cookieStore.delete("student_name");
                             redirect("/student-login");
                         }}>
-                            <button type="submit" className="flex items-center gap-2 text-sm font-bold text-red-400 hover:text-red-300 bg-red-500/10 px-4 py-2 rounded-xl transition-colors border border-red-500/20">
+                            <button type="submit" className="flex items-center gap-2 text-sm font-bold text-white hover:text-red-300 bg-red-500/80 hover:bg-red-500 px-4 py-2 rounded-xl transition-all shadow-lg">
                                 <LogOut size={16} /> Sign Out
                             </button>
                         </form>
@@ -80,42 +71,49 @@ export default async function StudentDashboard() {
 
                 {/* Dashboard Content */}
                 <main className="flex-1 max-w-6xl w-full mx-auto p-6 mt-8">
-                    <div className="mb-10">
-                        <h1 className="text-4xl font-extrabold text-white mb-2 drop-shadow-lg">
+                    <div className="mb-10 text-center">
+                        <h1 className="text-5xl font-black text-white mb-2 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)]">
                             Welcome back, {studentName}!
                         </h1>
-                        <p className="text-slate-300 text-lg">Ready for today's adventure?</p>
+                        <p className="text-white text-xl font-medium drop-shadow-md">Ready for today's adventure?</p>
                     </div>
 
                     {/* The Grid */}
-                    <div className="grid md:grid-cols-2 gap-6">
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
 
-                        <Link href="/student/avatar" className="group relative overflow-hidden bg-slate-900/60 border border-white/10 p-8 rounded-3xl backdrop-blur-xl hover:bg-slate-800/80 transition-all hover:-translate-y-1 shadow-2xl">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/20 blur-3xl rounded-full" />
-                            <Box className="w-12 h-12 text-indigo-400 mb-4" />
-                            <h2 className="text-2xl font-bold text-white mb-2">Avatar Studio</h2>
-                            <p className="text-slate-400">Customize your 3D character and buy new skins with your coins.</p>
+                        <Link href="/student/avatar" className="group relative overflow-hidden bg-slate-900/80 border-2 border-indigo-500/30 p-6 rounded-3xl backdrop-blur-md hover:bg-slate-800/90 transition-all hover:-translate-y-1 shadow-2xl">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/30 blur-3xl rounded-full" />
+                            <Box className="w-10 h-10 text-indigo-400 mb-3" />
+                            <h2 className="text-xl font-bold text-white mb-1">Avatar Studio</h2>
+                            <p className="text-slate-300 text-sm">Customize your 3D character and buy new skins.</p>
                         </Link>
 
-                        <Link href="/student/games" className="group relative overflow-hidden bg-slate-900/60 border border-white/10 p-8 rounded-3xl backdrop-blur-xl hover:bg-slate-800/80 transition-all hover:-translate-y-1 shadow-2xl">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 blur-3xl rounded-full" />
-                            <Gamepad2 className="w-12 h-12 text-emerald-400 mb-4" />
-                            <h2 className="text-2xl font-bold text-white mb-2">Arcade Arena</h2>
-                            <p className="text-slate-400">Play educational games, defeat challenges, and earn coins.</p>
+                        <Link href="/student/games" className="group relative overflow-hidden bg-slate-900/80 border-2 border-emerald-500/30 p-6 rounded-3xl backdrop-blur-md hover:bg-slate-800/90 transition-all hover:-translate-y-1 shadow-2xl">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/30 blur-3xl rounded-full" />
+                            <Gamepad2 className="w-10 h-10 text-emerald-400 mb-3" />
+                            <h2 className="text-xl font-bold text-white mb-1">Arcade Arena</h2>
+                            <p className="text-slate-300 text-sm">Play educational games and earn coins.</p>
                         </Link>
 
-                        <Link href="/join" className="group relative overflow-hidden bg-slate-900/60 border border-white/10 p-8 rounded-3xl backdrop-blur-xl hover:bg-slate-800/80 transition-all hover:-translate-y-1 shadow-2xl">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 blur-3xl rounded-full" />
-                            <Video className="w-12 h-12 text-blue-400 mb-4" />
-                            <h2 className="text-2xl font-bold text-white mb-2">Live Classroom</h2>
-                            <p className="text-slate-400">Join the live video meeting and learn with your teacher.</p>
+                        <Link href="/student/classroom" className="group relative overflow-hidden bg-slate-900/80 border-2 border-blue-500/30 p-6 rounded-3xl backdrop-blur-md hover:bg-slate-800/90 transition-all hover:-translate-y-1 shadow-2xl">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/30 blur-3xl rounded-full" />
+                            <Video className="w-10 h-10 text-blue-400 mb-3" />
+                            <h2 className="text-xl font-bold text-white mb-1">Live Classroom</h2>
+                            <p className="text-slate-300 text-sm">Join the live presentation and video meeting.</p>
                         </Link>
 
-                        <Link href="/student/lessons" className="group relative overflow-hidden bg-slate-900/60 border border-white/10 p-8 rounded-3xl backdrop-blur-xl hover:bg-slate-800/80 transition-all hover:-translate-y-1 shadow-2xl">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/20 blur-3xl rounded-full" />
-                            <BookOpen className="w-12 h-12 text-amber-400 mb-4" />
-                            <h2 className="text-2xl font-bold text-white mb-2">My Lessons</h2>
-                            <p className="text-slate-400">Review the AI-generated presentations and lesson notes.</p>
+                        <Link href="/student/lessons" className="group relative overflow-hidden bg-slate-900/80 border-2 border-amber-500/30 p-6 rounded-3xl backdrop-blur-md hover:bg-slate-800/90 transition-all hover:-translate-y-1 shadow-2xl">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/30 blur-3xl rounded-full" />
+                            <BookOpen className="w-10 h-10 text-amber-400 mb-3" />
+                            <h2 className="text-xl font-bold text-white mb-1">My Lessons</h2>
+                            <p className="text-slate-300 text-sm">Review past AI presentations and notes.</p>
+                        </Link>
+
+                        <Link href="/student/assignments" className="group relative overflow-hidden bg-slate-900/80 border-2 border-pink-500/30 p-6 rounded-3xl backdrop-blur-md hover:bg-slate-800/90 transition-all hover:-translate-y-1 shadow-2xl">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/30 blur-3xl rounded-full" />
+                            <FileText className="w-10 h-10 text-pink-400 mb-3" />
+                            <h2 className="text-xl font-bold text-white mb-1">Assignments</h2>
+                            <p className="text-slate-300 text-sm">Check your quizzes, assessments, and homework.</p>
                         </Link>
 
                     </div>

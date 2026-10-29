@@ -2,6 +2,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { Gamepad2, ArrowLeft } from "lucide-react";
+import Link from "next/link";
 
 export default function JoinGame() {
     const [pin, setPin] = useState("");
@@ -13,7 +15,6 @@ export default function JoinGame() {
         e.preventDefault();
         setError("");
 
-        // Check if session exists and is in lobby
         const { data: session, error } = await supabase
             .from("game_sessions")
             .select("id, status")
@@ -24,21 +25,28 @@ export default function JoinGame() {
             setError("Invalid Game PIN. Try again.");
             return;
         }
-
         if (session.status !== 'lobby') {
             setError("This game has already started!");
             return;
         }
-
-        // Redirect to the lobby page for this session
         router.push(`/play/${pin}`);
     }
 
     return (
-        <main className="min-h-screen bg-indigo-900 flex items-center justify-center p-4">
-            <div className="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-md text-center">
-                <h1 className="text-4xl font-extrabold text-indigo-900 mb-2">Join Game</h1>
-                <p className="text-slate-500 mb-8 font-medium">Enter the PIN from the teacher</p>
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
+            {/* Ambient Glow */}
+            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none" />
+
+            <Link href="/student" className="absolute top-8 left-8 flex items-center gap-2 text-slate-400 hover:text-white transition-colors font-bold">
+                <ArrowLeft size={20} /> Back to Dashboard
+            </Link>
+
+            <div className="bg-slate-900/80 border border-slate-700 p-10 rounded-[2rem] shadow-2xl w-full max-w-md text-center backdrop-blur-xl relative z-10">
+                <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-emerald-500/50">
+                    <Gamepad2 className="w-10 h-10 text-emerald-400" />
+                </div>
+                <h1 className="text-3xl font-extrabold text-white mb-2">Join Arena</h1>
+                <p className="text-slate-400 mb-8 font-medium">Enter the Game PIN from your teacher</p>
 
                 <form onSubmit={handleJoin} className="space-y-6">
                     <input
@@ -46,16 +54,16 @@ export default function JoinGame() {
                         maxLength={6}
                         value={pin}
                         onChange={(e) => setPin(e.target.value)}
-                        placeholder="123 456"
-                        className="w-full border-4 border-indigo-200 rounded-2xl px-4 py-4 text-center text-4xl tracking-widest font-extrabold text-indigo-900 focus:border-indigo-500 outline-none transition-colors"
+                        placeholder="123456"
+                        className="w-full bg-slate-950 border-2 border-slate-700 rounded-2xl px-4 py-4 text-center text-4xl tracking-widest font-extrabold text-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/50 outline-none transition-all"
                         required
                     />
-                    {error && <p className="text-red-500 font-bold">{error}</p>}
-                    <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xl py-4 rounded-2xl shadow-lg">
-                        Join
+                    {error && <p className="text-red-400 font-bold bg-red-500/10 p-2 rounded-lg">{error}</p>}
+                    <button type="submit" className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold text-xl py-4 rounded-2xl shadow-lg shadow-emerald-500/25 transition-all">
+                        Join Game
                     </button>
                 </form>
             </div>
-        </main>
+        </div>
     );
 }
