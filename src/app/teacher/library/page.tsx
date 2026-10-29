@@ -6,7 +6,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
     MonitorPlay, Plus, Play, Edit3, Trash2,
-    ArrowLeft, UploadCloud, FileText, Send, Users, X, Loader2, CheckCircle
+    ArrowLeft, UploadCloud, FileText, Send, Users, X, Loader2, CheckCircle,
+    Video // 🚨 Imported Video icon for Go Live
 } from "lucide-react";
 
 export default function TeacherLibrary() {
@@ -58,7 +59,7 @@ export default function TeacherLibrary() {
             if (cData.length > 0) setTargetValue(cData[0].id);
         }
 
-        // 🚨 FIX: Fetch ALL approved students
+        // Fetch ALL approved students
         const { data: sData } = await supabase
             .from("children")
             .select("id, full_name")
@@ -195,6 +196,15 @@ export default function TeacherLibrary() {
                                                 </Link>
                                             )}
                                         </div>
+
+                                        {/* 🚨 GO LIVE BUTTON */}
+                                        <button
+                                            onClick={() => router.push(`/teacher/live/${pres.id}`)}
+                                            className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 text-sm transition-all shadow-md shadow-red-500/20"
+                                        >
+                                            <Video size={14} /> Go Live
+                                        </button>
+
                                         <button onClick={() => openPublishModal(pres)} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 text-sm transition-all shadow-md">
                                             <Send size={14} /> Send to Class
                                         </button>
@@ -211,7 +221,6 @@ export default function TeacherLibrary() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
                     <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col font-sans text-slate-800">
 
-                        {/* Header */}
                         <div className="bg-[#1a73e8] p-6 text-white flex justify-between items-center">
                             <h2 className="text-xl font-medium flex items-center gap-2">
                                 <Send size={20} /> Assign to Class
@@ -226,7 +235,6 @@ export default function TeacherLibrary() {
                                 Select who should receive <strong className="text-slate-900">{selectedPresentation?.title}</strong>.
                             </div>
 
-                            {/* Radio Options */}
                             <div className="space-y-4">
                                 <label className="flex items-center gap-3 p-4 border rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
                                     <input type="radio" name="target" checked={targetType === 'class'} onChange={() => setTargetType('class')} className="w-5 h-5 text-[#1a73e8] focus:ring-[#1a73e8]" />
@@ -244,7 +252,6 @@ export default function TeacherLibrary() {
                                 </label>
                             </div>
 
-                            {/* 🚨 FIX 2: Fixed Dropdown Styling (Added bg-white and appearance-none) */}
                             <div className="pt-4 border-t">
                                 {targetType === 'class' && (
                                     <select
@@ -271,7 +278,6 @@ export default function TeacherLibrary() {
                             </div>
                         </div>
 
-                        {/* Footer */}
                         <div className="p-4 bg-slate-50 border-t flex justify-end gap-3">
                             <button onClick={() => setIsPublishModalOpen(false)} className="px-6 py-2 rounded-lg font-medium text-[#1a73e8] hover:bg-blue-50 transition-colors">
                                 Cancel
