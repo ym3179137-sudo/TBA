@@ -20,7 +20,7 @@ export default function TeacherLibrary() {
     // Publish Modal States
     const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
     const [selectedPresentation, setSelectedPresentation] = useState<any>(null);
-    const [targetType, setTargetType] = useState<'grade' | 'class' | 'student'>('class');
+    const [targetType, setTargetType] = useState<'class' | 'student'>('class');
     const [targetValue, setTargetValue] = useState("");
 
     // Dropdown Data
@@ -55,11 +55,15 @@ export default function TeacherLibrary() {
         const { data: cData } = await supabase.from("teacher_classes").select("*").eq("teacher_id", user.id);
         if (cData) {
             setClassesList(cData);
-            if (cData.length > 0) setTargetValue(cData[0].id); // Default to first class
+            if (cData.length > 0) setTargetValue(cData[0].id);
         }
 
-        // Fetch Students
-        const { data: sData } = await supabase.from("children").select("id, full_name").eq("teacher_id", user.id);
+        // 🚨 FIX: Fetch ALL approved students
+        const { data: sData } = await supabase
+            .from("children")
+            .select("id, full_name")
+            .eq("is_approved", true);
+
         if (sData) setStudentsList(sData);
     }
 
@@ -207,7 +211,7 @@ export default function TeacherLibrary() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
                     <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col font-sans text-slate-800">
 
-                        {/* Header (Google Blue) */}
+                        {/* Header */}
                         <div className="bg-[#1a73e8] p-6 text-white flex justify-between items-center">
                             <h2 className="text-xl font-medium flex items-center gap-2">
                                 <Send size={20} /> Assign to Class
@@ -240,18 +244,27 @@ export default function TeacherLibrary() {
                                 </label>
                             </div>
 
-                            {/* Dynamic Dropdowns */}
+                            {/* 🚨 FIX 2: Fixed Dropdown Styling (Added bg-white and appearance-none) */}
                             <div className="pt-4 border-t">
                                 {targetType === 'class' && (
-                                    <select value={targetValue} onChange={(e) => setTargetValue(e.target.value)} className="w-full border-2 border-slate-300 text-slate-900 rounded-xl p-3 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] outline-none transition-all font-medium">
+                                    <select
+                                        value={targetValue}
+                                        onChange={(e) => setTargetValue(e.target.value)}
+                                        className="w-full bg-white border-2 border-slate-300 text-slate-900 rounded-xl p-3 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] outline-none transition-all font-medium appearance-none"
+                                    >
                                         <option value="" disabled>Select a class...</option>
                                         {classesList.length === 0 && <option value="">No classes created yet</option>}
                                         {classesList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                     </select>
                                 )}
                                 {targetType === 'student' && (
-                                    <select value={targetValue} onChange={(e) => setTargetValue(e.target.value)} className="w-full border-2 border-slate-300 text-slate-900 rounded-xl p-3 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] outline-none transition-all font-medium">
+                                    <select
+                                        value={targetValue}
+                                        onChange={(e) => setTargetValue(e.target.value)}
+                                        className="w-full bg-white border-2 border-slate-300 text-slate-900 rounded-xl p-3 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] outline-none transition-all font-medium appearance-none"
+                                    >
                                         <option value="" disabled>Select a student...</option>
+                                        {studentsList.length === 0 && <option value="">No students available</option>}
                                         {studentsList.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
                                     </select>
                                 )}
