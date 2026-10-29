@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import pptxgen from "pptxgenjs";
 import {
-    Sparkles, Presentation, MonitorPlay, LogOut, Video,
-    FileText, Loader2, ArrowLeft, Download, Edit3, CheckCircle, ImageIcon
+    Sparkles, Presentation, MonitorPlay, LogOut,
+    FileText, Loader2, ArrowLeft, Download, Edit3,
+    CheckCircle, Link as LinkIcon
 } from "lucide-react";
 import DeckViewer from "@/components/DeckViewer";
 
@@ -103,7 +104,6 @@ export default function TeacherHub() {
     return (
         <div className="flex h-screen bg-slate-950 text-slate-200 font-sans overflow-hidden">
 
-            {/* LEFT SIDEBAR */}
             <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between hidden md:flex">
                 <div>
                     <div className="p-6 flex items-center gap-3">
@@ -129,7 +129,6 @@ export default function TeacherHub() {
                 </div>
             </aside>
 
-            {/* MIDDLE COLUMN - CREATOR / EDITOR */}
             <main className="w-full md:w-[450px] bg-slate-900/50 border-r border-slate-800 flex flex-col overflow-y-auto relative z-10">
 
                 {isEditing && deckData ? (
@@ -143,7 +142,6 @@ export default function TeacherHub() {
                             </button>
                         </div>
 
-                        {/* Slide Selector Tabs */}
                         <div className="flex gap-2 overflow-x-auto pb-4 mb-4 scrollbar-hide">
                             {deckData.slides.map((_: any, i: number) => (
                                 <button
@@ -178,15 +176,17 @@ export default function TeacherHub() {
 
                             <div>
                                 <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide flex items-center gap-2">
-                                    <ImageIcon size={14} className="text-indigo-400" /> AI Image Prompt
+                                    <LinkIcon size={14} className="text-blue-400" /> Custom Image URL (Optional)
                                 </label>
-                                <textarea
-                                    value={deckData.slides[activeSlideIndex].imagePrompt || ""}
-                                    onChange={(e) => updateSlide(activeSlideIndex, 'imagePrompt', e.target.value)}
-                                    className="w-full h-20 bg-slate-900 border border-indigo-500/30 text-indigo-100 rounded-xl px-4 py-3 focus:border-indigo-500 transition-all text-sm resize-none"
-                                    placeholder="Describe the image you want the AI to generate..."
+                                <input
+                                    type="text"
+                                    value={deckData.slides[activeSlideIndex].customImageUrl || ""}
+                                    onChange={(e) => updateSlide(activeSlideIndex, 'customImageUrl', e.target.value)}
+                                    className="w-full bg-slate-900 border border-blue-500/30 text-blue-100 rounded-xl px-4 py-3 focus:border-blue-500 transition-all text-sm"
+                                    placeholder="Paste a link from Google Images..."
                                 />
-                                <p className="text-[10px] text-slate-500 mt-1">Changes will automatically regenerate the AI image in the preview.</p>
+                                {/* 🚨 Removed the '->' arrows to fix the syntax error */}
+                                <p className="text-[10px] text-slate-500 mt-1">Go to Google Images, Right Click the image, Copy Image Address, and Paste here.</p>
                             </div>
 
                             <div>
@@ -217,7 +217,7 @@ export default function TeacherHub() {
                         <h1 className="text-3xl font-extrabold text-white mb-2 flex items-center gap-2">
                             <Sparkles className="text-emerald-400 w-8 h-8" /> AI Designer
                         </h1>
-                        <p className="text-slate-400 text-sm mb-8">Generate world-class presentations with AI images.</p>
+                        <p className="text-slate-400 text-sm mb-8">Generate 8 slides with real web images.</p>
 
                         {error && <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-xl mb-6 text-sm text-center">{error}</div>}
 
@@ -229,14 +229,14 @@ export default function TeacherHub() {
                                         <option value="Pre-K">Pre-K</option>
                                         <option value="KG1">KG1</option>
                                         <option value="KG2">KG2</option>
+                                        <option value="Grade 1">Grade 1</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Visual Style</label>
-                                    <select value={style} onChange={e => setStyle(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-all cursor-pointer">
-                                        <option value="3D Pixar">3D Pixar Animation</option>
-                                        <option value="Watercolor">Soft Watercolor</option>
-                                        <option value="Colorful Cartoon">Colorful Cartoon</option>
+                                    <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Curriculum</label>
+                                    <select value={curriculum} onChange={e => setCurriculum(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-all cursor-pointer">
+                                        <option value="General">General</option>
+                                        <option value="Montessori">Montessori</option>
                                     </select>
                                 </div>
                             </div>
@@ -268,23 +268,19 @@ export default function TeacherHub() {
                 )}
             </main>
 
-            {/* RIGHT COLUMN - PREVIEW */}
             <section className="flex-1 relative bg-slate-950 hidden lg:flex items-center justify-center p-8">
                 {loading ? (
                     <div className="flex flex-col items-center justify-center text-emerald-500 animate-pulse">
                         <MonitorPlay size={64} className="mb-4 opacity-50" />
                         <p className="text-xl font-bold">AI is designing your 8 slides...</p>
-                        <p className="text-sm text-slate-500 mt-2">Generating images and layout...</p>
                     </div>
                 ) : deckData ? (
                     <div className="w-full h-full max-w-6xl rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-slate-800 flex flex-col relative bg-slate-900">
-
-                        {/* Floating Edit Button on Preview */}
                         <button
                             onClick={() => setIsEditing(!isEditing)}
                             className="absolute top-6 right-6 z-50 bg-indigo-600/90 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl border border-indigo-400/30 shadow-xl shadow-indigo-500/20 font-bold text-sm flex items-center gap-2 transition-all backdrop-blur-md"
                         >
-                            <Edit3 size={16} /> {isEditing ? "Close Editor" : "Edit Slides"}
+                            <Edit3 size={16} /> {isEditing ? "Close Editor" : "Edit Slides & Add Images"}
                         </button>
 
                         <DeckViewer deck={deckData} />
@@ -293,7 +289,7 @@ export default function TeacherHub() {
                     <div className="text-center text-slate-600">
                         <MonitorPlay size={80} className="mx-auto mb-6 opacity-20" />
                         <h2 className="text-2xl font-bold text-slate-500">Presentation Preview</h2>
-                        <p className="text-slate-600 mt-2 max-w-sm mx-auto">Type your lesson notes and generate a stunning 8-slide presentation with AI images.</p>
+                        <p className="text-slate-600 mt-2 max-w-sm mx-auto">Generate a presentation, then you can paste image URLs from Google to customize it perfectly.</p>
                     </div>
                 )}
             </section>

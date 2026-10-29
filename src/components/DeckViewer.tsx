@@ -8,13 +8,11 @@ export default function DeckViewer({ deck }: { deck: any }) {
     const [imgLoading, setImgLoading] = useState(true);
     const [imgError, setImgError] = useState(false);
 
-    // Reset states when slide changes
     useEffect(() => {
         setImgLoading(true);
         setImgError(false);
     }, [currentSlide]);
 
-    // Keyboard Navigation
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === "ArrowRight" || e.key === " ") {
@@ -32,22 +30,28 @@ export default function DeckViewer({ deck }: { deck: any }) {
     const slide = deck.slides[currentSlide];
     const layout = slide.layout || "right-image";
 
-    // Clean the prompt
-    const cleanPrompt = (slide.imagePrompt || slide.heading || "cute cartoon education")
-        .replace(/[^a-zA-Z0-9 ]/g, "")
-        .substring(0, 100);
+    // 🚨 Determine the image source:
+    // 1. If the teacher pasted a custom URL, use that.
+    // 2. If not, search the web using the AI's keyword (loremflickr).
+    let imageUrl = slide.customImageUrl;
 
-    // 🚨 Use the "flux" model which is faster and has higher rate limits
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt)}?width=1024&height=768&nologo=true&model=flux&seed=${currentSlide}&token=${process.env.NEXT_PUBLIC_POLLINATIONS_API_KEY}`;
+    if (!imageUrl) {
+        const cleanPrompt = (slide.imagePrompt || slide.heading || "education")
+            .replace(/[^a-zA-Z0-9 ]/g, "")
+            .trim()
+            .split(/\s+/)
+            .slice(0, 3)
+            .join(",");
+
+        // Using LoremFlickr for free, real web images based on keywords
+        imageUrl = `https://loremflickr.com/1024/768/${cleanPrompt}?lock=${currentSlide}`;
+    }
+
     return (
         <div className="relative w-full h-full flex flex-col bg-slate-950">
-
-            {/* Slide Container */}
             <div className={`flex-1 flex flex-col md:flex-row items-center justify-center p-8 md:p-16 gap-12 transition-all duration-500 overflow-y-auto
                 ${layout === 'right-image' ? 'md:flex-row' : layout === 'left-image' ? 'md:flex-row-reverse' : 'flex-col text-center'}`}
             >
-
-                {/* Text Column */}
                 <div className={`flex-1 w-full space-y-6 ${layout === 'centered' ? 'max-w-3xl text-center' : ''}`}>
                     <div className="inline-block px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-sm mb-2">
                         Slide {currentSlide + 1}
@@ -73,24 +77,21 @@ export default function DeckViewer({ deck }: { deck: any }) {
                     )}
                 </div>
 
-                {/* Image Column */}
                 <div className={`flex-1 w-full max-w-lg relative ${layout === 'centered' ? 'mt-8' : ''}`}>
                     <div className="relative aspect-[4/3] w-full rounded-3xl overflow-hidden shadow-2xl border-4 border-slate-800 bg-slate-900 group">
 
-                        {/* AI Image Loading Spinner */}
                         {imgLoading && !imgError && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-slate-900">
                                 <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-3" />
-                                <p className="text-xs text-emerald-400 font-bold uppercase tracking-widest animate-pulse">Generating AI Image...</p>
+                                <p className="text-xs text-emerald-400 font-bold uppercase tracking-widest animate-pulse">Loading Image...</p>
                             </div>
                         )}
 
-                        {/* 🚨 Graceful Fallback UI if the API fails */}
                         {imgError ? (
                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 p-8 text-center">
                                 <ImageOff className="w-12 h-12 text-indigo-400 mb-4 opacity-50" />
                                 <p className="text-white font-bold text-2xl mb-2">{slide.heading}</p>
-                                <p className="text-slate-400 text-sm max-w-xs">The AI image limit was reached. You can still present this slide, or try regenerating it in a few minutes.</p>
+                                <p className="text-slate-400 text-sm max-w-xs">Image could not load. Please try adding a custom Image URL in the editor.</p>
                             </div>
                         ) : (
                             <img
@@ -108,7 +109,6 @@ export default function DeckViewer({ deck }: { deck: any }) {
                 </div>
             </div>
 
-            {/* Navigation Controls */}
             <div className="p-6 bg-slate-900/50 backdrop-blur-md border-t border-slate-800 flex justify-between items-center">
                 <div className="flex gap-2">
                     {deck.slides.map((_: any, i: number) => (

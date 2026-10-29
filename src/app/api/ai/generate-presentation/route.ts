@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
     try {
+        // 🚨 Extract the variables here
         const { lessonText, gradeLevel, curriculum, style } = await req.json();
 
         if (!lessonText) return NextResponse.json({ error: "Lesson text is required" }, { status: 400 });
@@ -20,13 +21,12 @@ Convert this lesson into a stunning, 8-slide presentation.
 CONTEXT:
 - Grade: ${gradeLevel}
 - Curriculum: ${curriculum}
-- Visual Style for AI Images: ${style} (Make image prompts highly detailed, e.g., "${style} style, vibrant colors, 8k resolution, highly detailed, cute, educational")
 
 RULES:
 1. Create exactly 8 slides. (Intro, 4 content slides, activity, quiz, outro).
 2. Use extremely simple, playful language.
 3. Include a "teacherPrompt" for interaction.
-4. Create a highly detailed "imagePrompt" for the image generator.
+4. Create a 2-3 word "imagePrompt" (e.g., "lion cub", "red apple", "solar system"). This will be used to search for real photos.
 5. Layout must be either "left-image", "right-image", or "centered".
 
 Return ONLY a valid JSON object:
@@ -43,8 +43,9 @@ Return ONLY a valid JSON object:
       "heading": "Slide Title",
       "bullets": ["Point 1", "Point 2"],
       "teacherPrompt": "Ask the kids: What sound does a lion make?",
-      "imagePrompt": "A highly detailed 3D Pixar style cute lion cub smiling, colorful, educational, 8k",
-      "layout": "right-image"
+      "imagePrompt": "cute lion cub",
+      "layout": "right-image",
+      "customImageUrl": ""
     }
   ]
 }
@@ -64,9 +65,11 @@ ${lessonText}`;
         if (!jsonMatch) throw new Error("AI failed to return valid JSON");
 
         const deck = JSON.parse(jsonMatch[0]);
+
         return NextResponse.json({ deck });
 
     } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error("Presentation Generation Error:", error);
+        return NextResponse.json({ error: error.message || "Failed to generate presentation" }, { status: 500 });
     }
 }
