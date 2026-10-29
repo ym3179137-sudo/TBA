@@ -1,251 +1,247 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { createAssignment } from "@/app/actions/assignments";
 import {
-    ArrowLeft, FileText, ClipboardList, Lock, Unlock,
-    AlertTriangle, CheckCircle, ChevronRight, X, User
+    ArrowLeft, Save, Lock, Unlock, Plus, Trash2,
+    FileText, ClipboardList, Loader2, AlertTriangle
 } from "lucide-react";
 
-export default function TeacherAssessmentsPage() {
+export default function TeacherAssignmentsPage() {
     const router = useRouter();
-    const supabase = createClient();
 
-    const [assignments, setAssignments] = useState<any[]>([]);
-    const [submissions, setSubmissions] = useState<any[]>([]);
-    const [selectedAssignment, setSelectedAssignment] = useState<any | null>(null);
-    const [selectedSubmission, setSelectedSubmission] = useState<any | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [title, setTitle] = useState("");
+    const [type, setType] = useState<"doc" | "form">("form");
+    const [targetGrade, setTargetGrade] = useState("KG1");
+    const [lockMode, setLockMode] = useState(false);
 
-    useEffect(() => {
-        fetchData();
-    }, []);
+    const [questions, setQuestions] = useState<any[]>([
+        { id: "q1", type: "short_text", label: "Question 1", required: true }
+    ]);
 
-    async function fetchData() {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return router.push("/sign-in");
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+    const [success, setSuccess] = useState(false);
 
-        // 1. Fetch Teacher's Assignments
-        const { data: assignData } = await supabase
-            .from("assignments")
-            .select("*")
-            .eq("teacher_id", user.id)
-            .order("created_at", { ascending: false });
+    const addQuestion = (qType: string) => {
+        setQuestions([...questions, {
+            id: `q${Date.now()}`,
+            type: qType,
+            label: `New ${qType.replace('_', ' ')} question`,
+            options: qType === 'multiple_choice' || qType === 'checkboxes' ? ["Option 1", "Option 2"] : undefined
+        }]);
+    };
 
-        if (assignData) setAssignments(assignData);
+    const updateQuestion = (index: number, field: string, value: any) => {
+        const newQ = [...questions];
+        newQ[index][field] = value;
+        setQuestions(newQ);
+    };
 
-        // 2. Fetch ALL submissions for these assignments (with student names)
-        if (assignData && assignData.length > 0) {
-            const assignIds = assignData.map(a => a.id);
-            const { data: subData } = await supabase
-                .from("submissions")
-                .select(`
-                    *,
-                    children (full_name, class_name)
-                `)
-                .in("assignment_id", assignIds)
-                .order("submitted_at", { ascending: false });
+    const handleCreate = async () => {
+        if (!title.trim()) return setError("Please enter an assignment title.");
 
-            if (subData) setSubmissions(subData);
+        setLoading(true);
+        setError("");
+        setSuccess(false);
+
+        try {
+            await createAssignment({
+                title,
+                type,
+                target_grade: targetGrade,
+                settings: {
+                    lockMode,
+                    questions: type === 'form' ? questions : []
+                }
+            });
+
+            setSuccess(true);
+            setTimeout(() => router.push("/teacher/assessments"), 2000);
+
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
         }
-
-        setLoading(false);
-    }
+    };
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-200 p-8 font-sans flex flex-col">
-            <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col">
+        <div className="min-h-screen bg-slate-950 text-slate-200 p-8 font-sans">
+            <div className="max-w-4xl mx-auto">
 
-                {/* Header */}
-                <div className="flex justify-between items-center mb-8">
-                    <div className="flex items-center gap-4">
-                        <Link href="/teacher" className="bg-slate-800 hover:bg-slate-700 p-2.5 rounded-xl transition-all">
-                            <ArrowLeft size={20} />
-                        </Link>
-                        <div>
-                            <h1 className="text-3xl font-extrabold text-white">Assessments & Submissions</h1>
-                            <p className="text-slate-400 text-sm">Review student work and integrity scores.</p>
-                        </div>
-                    </div>
-                    <Link href="/teacher/assignments" className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-3 rounded-xl shadow-lg transition-all">
-                        + Create New
+                <div className="flex items-center gap-4 mb-8">
+                    <Link href="/teacher" className="bg-slate-800 hover:bg-slate-700 p-2.5 rounded-xl transition-all">
+                        <ArrowLeft size={20} />
                     </Link>
+                    <div>
+                        <h1 className="text-3xl font-extrabold text-white">Create Assignment</h1>
+                        <p className="text-slate-400 text-sm">Build a Google Doc or Google Form style assignment.</p>
+                    </div>
                 </div>
 
-                {loading ? (
-                    <div className="text-center py-20 text-slate-500">Loading assessments...</div>
-                ) : assignments.length === 0 ? (
-                    <div className="text-center py-20 bg-slate-900 rounded-3xl border border-slate-800">
-                        <ClipboardList className="w-16 h-16 text-slate-700 mx-auto mb-4" />
-                        <h2 className="text-2xl font-bold text-slate-500">No assignments yet</h2>
-                        <p className="text-slate-600 mt-2 mb-6">Create your first Google Form or Doc assignment.</p>
-                        <Link href="/teacher/assignments" className="bg-emerald-600 text-white px-6 py-2 rounded-xl font-bold">Create Assignment</Link>
+                {error && (
+                    <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-xl mb-6 flex items-center gap-3 font-bold">
+                        <AlertTriangle /> {error}
                     </div>
-                ) : (
-                    <div className="flex flex-col lg:flex-row gap-8 flex-1">
+                )}
+                {success && (
+                    <div className="bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 p-4 rounded-xl mb-6 flex items-center gap-3 font-bold">
+                        ✅ Assignment created successfully! Redirecting...
+                    </div>
+                )}
 
-                        {/* LEFT SIDE: Assignment List */}
-                        <div className="w-full lg:w-1/3 space-y-4">
-                            <h2 className="text-xl font-bold text-white mb-4">Your Assignments</h2>
-                            {assignments.map(assign => {
-                                const subCount = submissions.filter(s => s.assignment_id === assign.id).length;
-                                const isSelected = selectedAssignment?.id === assign.id;
+                <div className="space-y-6 bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-2xl">
 
-                                return (
-                                    <div
-                                        key={assign.id}
-                                        onClick={() => { setSelectedAssignment(assign); setSelectedSubmission(null); }}
-                                        className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${isSelected
-                                                ? 'bg-slate-800 border-emerald-500 shadow-lg'
-                                                : 'bg-slate-900 border-slate-800 hover:border-slate-700'
-                                            }`}
-                                    >
-                                        <div className="flex justify-between items-start mb-2">
-                                            <h3 className="font-bold text-white text-lg">{assign.title}</h3>
-                                            {assign.type === 'form' ? <ClipboardList className="text-blue-400" size={20} /> : <FileText className="text-amber-400" size={20} />}
-                                        </div>
-                                        <div className="flex items-center gap-3 text-xs font-bold text-slate-400">
-                                            <span className="bg-slate-950 px-2 py-1 rounded-md">Grade: {assign.target_grade}</span>
-                                            <span className="bg-slate-950 px-2 py-1 rounded-md">{subCount} Submissions</span>
-                                            {assign.settings?.lockMode ? (
-                                                <span className="text-red-400 flex items-center gap-1"><Lock size={12} /> Locked</span>
-                                            ) : (
-                                                <span className="text-slate-500 flex items-center gap-1"><Unlock size={12} /> Open</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-sm font-bold text-slate-400 mb-2">Assignment Title</label>
+                            <input
+                                type="text"
+                                value={title}
+                                onChange={e => setTitle(e.target.value)}
+                                placeholder="e.g., Science Quiz - Water Cycle"
+                                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:border-emerald-500 outline-none"
+                            />
                         </div>
+                        <div>
+                            <label className="block text-sm font-bold text-slate-400 mb-2">Target Grade</label>
+                            <select
+                                value={targetGrade}
+                                onChange={e => setTargetGrade(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:border-emerald-500 outline-none"
+                            >
+                                <option value="Pre-K">Pre-K</option>
+                                <option value="KG1">KG1</option>
+                                <option value="KG2">KG2</option>
+                                <option value="Grade 1">Grade 1</option>
+                            </select>
+                        </div>
+                    </div>
 
-                        {/* RIGHT SIDE: Submissions for selected assignment */}
-                        <div className="w-full lg:w-2/3">
-                            {!selectedAssignment ? (
-                                <div className="h-full flex flex-col items-center justify-center bg-slate-900/50 rounded-3xl border border-slate-800 border-dashed p-12 text-center">
-                                    <ChevronRight className="w-12 h-12 text-slate-700 mb-4" />
-                                    <p className="text-slate-500 font-bold text-lg">Select an assignment on the left to view student submissions.</p>
-                                </div>
-                            ) : (
-                                <div className="bg-slate-900 rounded-3xl border border-slate-800 p-6 h-full">
-                                    <h2 className="text-xl font-bold text-white mb-6">
-                                        Submissions for: <span className="text-emerald-400">{selectedAssignment.title}</span>
-                                    </h2>
+                    <div className="flex gap-4 p-2 bg-slate-950 rounded-xl border border-slate-800">
+                        <button
+                            onClick={() => setType("form")}
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-bold transition-all ${type === "form" ? "bg-emerald-600 text-white" : "text-slate-400 hover:bg-slate-800"}`}
+                        >
+                            <ClipboardList size={20} /> Google Form (Quiz)
+                        </button>
+                        <button
+                            onClick={() => setType("doc")}
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-bold transition-all ${type === "doc" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-slate-800"}`}
+                        >
+                            <FileText size={20} /> Google Doc (Writing)
+                        </button>
+                    </div>
 
-                                    {submissions.filter(s => s.assignment_id === selectedAssignment.id).length === 0 ? (
-                                        <div className="text-center py-12 text-slate-500">No students have submitted this yet.</div>
-                                    ) : (
-                                        <div className="space-y-3">
-                                            {submissions.filter(s => s.assignment_id === selectedAssignment.id).map(sub => (
-                                                <div
-                                                    key={sub.id}
-                                                    onClick={() => setSelectedSubmission(sub)}
-                                                    className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center cursor-pointer hover:border-slate-600 transition-all"
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center">
-                                                            <User size={18} className="text-slate-400" />
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-bold text-white">{sub.children?.full_name}</p>
-                                                            <p className="text-xs text-slate-500">{new Date(sub.submitted_at).toLocaleString()}</p>
-                                                        </div>
-                                                    </div>
+                    <div className="flex items-center justify-between bg-slate-950 p-4 rounded-xl border border-slate-800">
+                        <div>
+                            <p className="font-bold text-white flex items-center gap-2">
+                                {lockMode ? <Lock className="text-red-400" size={18} /> : <Unlock className="text-slate-400" size={18} />}
+                                Lock Mode (Anti-Cheat)
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">Logs a violation if the student switches tabs or pastes large text.</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" checked={lockMode} onChange={e => setLockMode(e.target.checked)} className="sr-only peer" />
+                            <div className="w-14 h-7 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-red-500"></div>
+                        </label>
+                    </div>
 
-                                                    <div className="flex items-center gap-4">
-                                                        {sub.violations?.length > 0 ? (
-                                                            <span className="bg-red-500/10 text-red-400 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 border border-red-500/20">
-                                                                <AlertTriangle size={12} /> {sub.violations.length} Violations
-                                                            </span>
-                                                        ) : (
-                                                            <span className="bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 border border-emerald-500/20">
-                                                                <CheckCircle size={12} /> Clean
-                                                            </span>
-                                                        )}
-                                                        <span className="font-extrabold text-white bg-slate-800 px-3 py-1 rounded-lg">{sub.integrity_score}%</span>
-                                                    </div>
+                    {type === "form" && (
+                        <div className="space-y-4 pt-6 border-t border-slate-800">
+                            <h2 className="text-xl font-bold text-white mb-4">Form Questions</h2>
+
+                            {questions.map((q, i) => (
+                                <div key={q.id} className="bg-slate-950 p-5 rounded-2xl border border-slate-800 relative group">
+                                    <button
+                                        onClick={() => setQuestions(questions.filter((_, idx) => idx !== i))}
+                                        className="absolute top-4 right-4 text-slate-500 hover:text-red-400 transition-colors"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+
+                                    <div className="flex gap-4 mb-3 pr-8">
+                                        <input
+                                            type="text"
+                                            value={q.label}
+                                            onChange={(e) => updateQuestion(i, 'label', e.target.value)}
+                                            className="flex-1 bg-slate-900 border border-slate-700 text-white p-3 rounded-xl font-bold focus:border-emerald-500 outline-none"
+                                            placeholder="Enter your question..."
+                                        />
+                                        <select
+                                            value={q.type}
+                                            onChange={(e) => updateQuestion(i, 'type', e.target.value)}
+                                            className="bg-slate-800 text-sm font-bold text-slate-300 p-3 rounded-xl outline-none"
+                                        >
+                                            <option value="short_text">Short Text</option>
+                                            <option value="long_text">Long Text</option>
+                                            <option value="multiple_choice">Multiple Choice</option>
+                                            <option value="checkboxes">Checkboxes</option>
+                                        </select>
+                                    </div>
+
+                                    {(q.type === 'multiple_choice' || q.type === 'checkboxes') && (
+                                        <div className="mt-4 space-y-2 pl-4 border-l-2 border-emerald-500/50">
+                                            {q.options.map((opt: string, optIdx: number) => (
+                                                <div key={optIdx} className="flex items-center gap-2">
+                                                    <div className={`w-4 h-4 rounded-full border border-slate-600 ${q.type === 'multiple_choice' ? 'rounded-full' : 'rounded-sm'}`}></div>
+                                                    <input
+                                                        type="text"
+                                                        value={opt}
+                                                        onChange={(e) => {
+                                                            const newOpts = [...q.options];
+                                                            newOpts[optIdx] = e.target.value;
+                                                            updateQuestion(i, 'options', newOpts);
+                                                        }}
+                                                        className="flex-1 bg-slate-900 border border-slate-700 text-sm text-white p-2 rounded-lg outline-none focus:border-emerald-500"
+                                                    />
                                                 </div>
                                             ))}
+                                            <button
+                                                onClick={() => updateQuestion(i, 'options', [...q.options, `Option ${q.options.length + 1}`])}
+                                                className="text-xs text-emerald-400 font-bold mt-2 hover:text-emerald-300"
+                                            >
+                                                + Add Option
+                                            </button>
                                         </div>
                                     )}
                                 </div>
-                            )}
-                        </div>
+                            ))}
 
-                    </div>
-                )}
-            </div>
-
-            {/* 🚨 SUBMISSION DETAILS MODAL */}
-            {selectedSubmission && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-                    <div className="bg-slate-900 border border-slate-700 w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-
-                        {/* Modal Header */}
-                        <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900">
-                            <div>
-                                <h2 className="text-2xl font-extrabold text-white">{selectedSubmission.children?.full_name}'s Work</h2>
-                                <p className="text-slate-400 text-sm">{selectedAssignment?.title}</p>
+                            <div className="flex flex-wrap gap-2 mt-4">
+                                <button onClick={() => addQuestion('short_text')} className="text-sm bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-all"><Plus size={16} /> Short Text</button>
+                                <button onClick={() => addQuestion('long_text')} className="text-sm bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-all"><Plus size={16} /> Long Text</button>
+                                <button onClick={() => addQuestion('multiple_choice')} className="text-sm bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-all"><Plus size={16} /> Multiple Choice</button>
+                                <button onClick={() => addQuestion('checkboxes')} className="text-sm bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-all"><Plus size={16} /> Checkboxes</button>
                             </div>
-                            <button onClick={() => setSelectedSubmission(null)} className="text-slate-400 hover:text-white bg-slate-800 p-2 rounded-xl">
-                                <X size={20} />
-                            </button>
                         </div>
+                    )}
 
-                        {/* Integrity Report */}
-                        <div className={`p-4 flex items-center justify-between border-b border-slate-800 ${selectedSubmission.violations?.length > 0 ? 'bg-red-500/10' : 'bg-emerald-500/10'}`}>
-                            <div className="flex items-center gap-2 font-bold">
-                                {selectedSubmission.violations?.length > 0 ? <AlertTriangle className="text-red-400" /> : <CheckCircle className="text-emerald-400" />}
-                                <span className={selectedSubmission.violations?.length > 0 ? 'text-red-400' : 'text-emerald-400'}>
-                                    Integrity Score: {selectedSubmission.integrity_score}%
-                                </span>
-                            </div>
-                            {selectedSubmission.violations?.length > 0 && (
-                                <span className="text-sm text-red-300 bg-red-500/20 px-3 py-1 rounded-lg">
-                                    {selectedSubmission.violations.length} issues logged
-                                </span>
-                            )}
+                    {type === "doc" && (
+                        <div className="pt-6 border-t border-slate-800 text-center py-10">
+                            <FileText className="w-16 h-16 text-blue-500 mx-auto mb-4 opacity-50" />
+                            <h3 className="text-xl font-bold text-white mb-2">Google Doc Mode</h3>
+                            <p className="text-slate-400 max-w-md mx-auto">
+                                Students will get a blank, distraction-free text editor to write their essay or short answers.
+                                {lockMode ? " Paste tracking and tab-switching alerts are ACTIVE." : " Lock mode is off."}
+                            </p>
                         </div>
+                    )}
 
-                        {/* Content Area */}
-                        <div className="p-6 overflow-y-auto">
-                            {selectedSubmission.violations?.length > 0 && (
-                                <div className="mb-6 bg-slate-950 p-4 rounded-xl border border-red-500/30">
-                                    <h3 className="text-sm font-bold text-red-400 mb-2">Violation Log:</h3>
-                                    <ul className="list-disc pl-4 text-xs text-red-300 space-y-1">
-                                        {selectedSubmission.violations.map((v: any, i: number) => (
-                                            <li key={i}>{typeof v === 'string' ? v : JSON.stringify(v)}</li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
+                    <button
+                        onClick={handleCreate}
+                        disabled={loading}
+                        className="w-full mt-8 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-extrabold text-lg py-4 rounded-xl shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                    >
+                        {loading ? <Loader2 className="animate-spin" /> : <Save size={20} />}
+                        {loading ? "Saving..." : "Publish Assignment"}
+                    </button>
 
-                            <h3 className="text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider">Student Answers:</h3>
-
-                            {/* Render based on assignment type */}
-                            {selectedAssignment?.type === 'doc' ? (
-                                <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 text-slate-300 whitespace-pre-wrap font-serif leading-relaxed">
-                                    {selectedSubmission.content?.text || "No text submitted."}
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    {selectedAssignment?.settings?.questions?.map((q: any, i: number) => (
-                                        <div key={q.id} className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                                            <p className="font-bold text-white mb-2">{i + 1}. {q.label}</p>
-                                            <p className="text-emerald-400 font-medium bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20">
-                                                {Array.isArray(selectedSubmission.content?.[q.id])
-                                                    ? selectedSubmission.content[q.id].join(", ")
-                                                    : selectedSubmission.content?.[q.id] || <span className="text-slate-500 italic">Skipped</span>}
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
                 </div>
-            )}
+            </div>
         </div>
     );
 }
