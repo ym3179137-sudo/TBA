@@ -13,11 +13,25 @@ export default function StudentClassroom() {
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const laserCanvasRef = useRef<HTMLCanvasElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null); // 🚨 Map to this container
     const channelRef = useRef<any>(null);
+
+    // 🚨 Fix Canvas Sizing
+    useEffect(() => {
+        const updateSize = () => {
+            if (containerRef.current) {
+                const { clientWidth, clientHeight } = containerRef.current;
+                if (canvasRef.current) { canvasRef.current.width = clientWidth; canvasRef.current.height = clientHeight; }
+                if (laserCanvasRef.current) { laserCanvasRef.current.width = clientWidth; laserCanvasRef.current.height = clientHeight; }
+            }
+        };
+        updateSize();
+        window.addEventListener('resize', updateSize);
+        return () => window.removeEventListener('resize', updateSize);
+    }, [loading]);
 
     // 🚨 Smooth Laser Trace Loop
     const laserPoints = useRef<{ x: number; y: number; life: number }[]>([]);
-
     useEffect(() => {
         let animationFrameId: number;
         const render = () => {
@@ -26,7 +40,6 @@ export default function StudentClassroom() {
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
                     laserPoints.current.forEach((p) => {
                         p.life -= 0.03;
                         if (p.life > 0) {
@@ -99,7 +112,7 @@ export default function StudentClassroom() {
         if (channelRef.current) supabase.removeChannel(channelRef.current);
 
         channelRef.current = supabase.channel(`live-room-${sessionId}`, {
-            config: { presence: { key: studentId } } // 🚨 Student key
+            config: { presence: { key: studentId } }
         });
 
         channelRef.current
@@ -108,52 +121,41 @@ export default function StudentClassroom() {
                 laserPoints.current.push({ x: payload.payload.x, y: payload.payload.y, life: 1.0 });
             })
             .on('broadcast', { event: 'dot' }, (payload: any) => {
-                const canvas = canvasRef.current;
-                if (!canvas) return;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) return;
-                const rect = canvas.getBoundingClientRect();
-                ctx.beginPath();
-                ctx.arc(payload.payload.x * rect.width, payload.payload.y * rect.height, 2, 0, Math.PI * 2);
-                ctx.fillStyle = "#ef4444";
-                ctx.fill();
-                ctx.beginPath();
-                ctx.moveTo(payload.payload.x * rect.width, payload.payload.y * rect.height);
+                const ctx = canvasRef.current?.getContext('2d');
+                if (ctx && canvasRef.current) {
+                    ctx.beginPath();
+                    ctx.arc(payload.payload.x * canvasRef.current.width, payload.payload.y * canvasRef.current.height, 2, 0, Math.PI * 2);
+                    ctx.fillStyle = "#ef4444";
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(payload.payload.x * canvasRef.current.width, payload.payload.y * canvasRef.current.height);
+                }
             })
             .on('broadcast', { event: 'draw' }, (payload: any) => {
-                const canvas = canvasRef.current;
-                if (!canvas) return;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) return;
-                const rect = canvas.getBoundingClientRect();
-
-                ctx.lineTo(payload.payload.x * rect.width, payload.payload.y * rect.height);
-                ctx.strokeStyle = "#ef4444";
-                ctx.lineWidth = 4;
-                ctx.lineCap = "round";
-                ctx.lineJoin = "round";
-                ctx.stroke();
+                const ctx = canvasRef.current?.getContext('2d');
+                if (ctx && canvasRef.current) {
+                    ctx.lineTo(payload.payload.x * canvasRef.current.width, payload.payload.y * canvasRef.current.height);
+                    ctx.strokeStyle = "#ef4444";
+                    ctx.lineWidth = 4;
+                    ctx.lineCap = "round";
+                    ctx.lineJoin = "round";
+                    ctx.stroke();
+                }
             })
             .on('broadcast', { event: 'text' }, (payload: any) => {
-                const canvas = canvasRef.current;
-                if (!canvas) return;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) return;
-                const rect = canvas.getBoundingClientRect();
-                ctx.fillStyle = "#ef4444";
-                ctx.font = "bold 30px Arial";
-                ctx.fillText(payload.payload.text, payload.payload.x * rect.width, payload.payload.y * rect.height);
+                const ctx = canvasRef.current?.getContext('2d');
+                if (ctx && canvasRef.current) {
+                    ctx.fillStyle = "#ef4444";
+                    ctx.font = "bold 30px Arial";
+                    ctx.fillText(payload.payload.text, payload.payload.x * canvasRef.current.width, payload.payload.y * canvasRef.current.height);
+                }
             })
             .on('broadcast', { event: 'clear' }, () => {
-                const canvas = canvasRef.current;
-                if (canvas) {
-                    const ctx = canvas.getContext('2d');
-                    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-                }
+                const ctx = canvasRef.current?.getContext('2d');
+                if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
             })
             .subscribe(async (status: string) => {
                 if (status === 'SUBSCRIBED') {
-                    // 🚨 Track presence so teacher sees us
                     await channelRef.current.track({
                         role: 'student',
                         name: studentName,
@@ -175,7 +177,7 @@ export default function StudentClassroom() {
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-hidden relative">
+                <div className="flex-1 overflow-hidden relative" ref={containerRef}>
                     {liveData.presentation.file_url ? (
                         <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(liveData.presentation.file_url)}`} className="w-full h-full border-none pointer-events-none" />
                     ) : (
@@ -187,21 +189,8 @@ export default function StudentClassroom() {
                         />
                     )}
 
-                    {/* Annotation Canvas */}
-                    <canvas
-                        ref={canvasRef}
-                        className="absolute inset-0 z-40 pointer-events-none w-full h-full"
-                        width={window.innerWidth}
-                        height={window.innerHeight}
-                    />
-
-                    {/* 🚨 Laser Canvas */}
-                    <canvas
-                        ref={laserCanvasRef}
-                        className="absolute inset-0 z-50 pointer-events-none w-full h-full"
-                        width={window.innerWidth}
-                        height={window.innerHeight}
-                    />
+                    <canvas ref={canvasRef} className="absolute inset-0 z-40 pointer-events-none" />
+                    <canvas ref={laserCanvasRef} className="absolute inset-0 z-50 pointer-events-none" />
                 </div>
             </div>
         );
