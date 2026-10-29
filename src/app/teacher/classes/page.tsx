@@ -14,9 +14,9 @@ export default function TeacherClassManager() {
     const [students, setStudents] = useState<any[]>([]);
     const [newClassName, setNewClassName] = useState("");
 
-    // New Student States (In case teacher wants to add one directly)
+    // New Student States
     const [newStudentName, setNewStudentName] = useState("");
-    const [newStudentGrade, setNewStudentGrade] = useState("KG1");
+    const [newStudentGrade, setNewStudentGrade] = useState("Pre-K");
     const [newStudentPin, setNewStudentPin] = useState("");
 
     const [loading, setLoading] = useState(true);
@@ -31,7 +31,7 @@ export default function TeacherClassManager() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return router.push("/sign-in");
 
-        // 1. Fetch teacher's custom classes
+        // Fetch teacher's custom classes
         const { data: classData } = await supabase
             .from("teacher_classes")
             .select("*")
@@ -39,13 +39,12 @@ export default function TeacherClassManager() {
             .order("created_at", { ascending: true });
         if (classData) setClasses(classData);
 
-        // 🚨 2. FETCH ONLY STUDENTS ASSIGNED TO THIS TEACHER BY THE ADMIN
-        // Notice: We DO NOT fetch 'student_pin' here. The teacher is not allowed to see it.
+        // Fetch ONLY students assigned to this teacher
         const { data: studentData } = await supabase
             .from("children")
             .select("id, full_name, class_id, class_name")
-            .eq("teacher_id", user.id) // Only students the Admin sent to this teacher
-            .eq("is_approved", true)   // Only students the Admin approved
+            .eq("teacher_id", user.id)
+            .eq("is_approved", true)
             .order("full_name", { ascending: true });
 
         if (studentData) setStudents(studentData);
@@ -69,7 +68,7 @@ export default function TeacherClassManager() {
         fetchData();
     }
 
-    // Teacher manually adds a student (Admin bypass - optional)
+    // 🚨 UPDATED: Handle existing students gracefully via the API route
     async function addNewStudent(e: React.FormEvent) {
         e.preventDefault();
         if (!newStudentName.trim() || newStudentPin.length !== 4) {
@@ -78,27 +77,40 @@ export default function TeacherClassManager() {
         setAddingStudent(true);
 
         const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            alert("You must be logged in.");
+            setAddingStudent(false);
+            return;
+        }
 
-        const { error } = await supabase.from("children").insert({
-            teacher_id: user?.id,
-            full_name: newStudentName,
-            class_name: newStudentGrade,
-            student_pin: newStudentPin,
-            is_approved: true
-        });
+        try {
+            const res = await fetch("/api/teacher/add-student", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    fullName: newStudentName,
+                    studentPin: newStudentPin,
+                    grade: newStudentGrade,
+                    teacherId: user.id
+                })
+            });
 
-        setAddingStudent(false);
+            const data = await res.json();
 
-        if (error) {
-            alert("Failed to add student: " + error.message);
-        } else {
+            if (!res.ok) throw new Error(data.error);
+
+            alert("✅ " + data.message);
             setNewStudentName("");
             setNewStudentPin("");
-            fetchData();
+            fetchData(); // Refresh the list
+
+        } catch (err: any) {
+            alert("Failed to add student: " + err.message);
+        } finally {
+            setAddingStudent(false);
         }
     }
 
-    // 🚨 Assign student to a class
     async function assignStudent(studentId: string, classId: string) {
         await supabase.from("children").update({ class_id: classId }).eq("id", studentId);
         fetchData();
@@ -106,7 +118,6 @@ export default function TeacherClassManager() {
 
     if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
 
-    // Separate students who haven't been assigned to a class yet
     const unassignedStudents = students.filter(s => !s.class_id);
 
     return (
@@ -126,7 +137,6 @@ export default function TeacherClassManager() {
                     {/* LEFT COLUMN: Forms */}
                     <div className="space-y-6">
 
-                        {/* Create Class Form */}
                         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6">
                             <h2 className="text-xl font-bold text-white mb-4">Create a Class Group</h2>
                             <div className="space-y-4">
@@ -147,7 +157,6 @@ export default function TeacherClassManager() {
                             </div>
                         </div>
 
-                        {/* Add Student Form (Optional) */}
                         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6">
                             <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
                                 <UserPlus className="text-emerald-400" size={20} /> Add Student
@@ -174,7 +183,7 @@ export default function TeacherClassManager() {
                                 <input
                                     type="text"
                                     maxLength={4}
-                                    placeholder="4-Digit PIN (Parent will use this)"
+                                    placeholder="4-Digit PIN"
                                     value={newStudentPin}
                                     onChange={(e) => setNewStudentPin(e.target.value)}
                                     className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 outline-none focus:border-emerald-500 text-center tracking-widest font-bold"
@@ -193,28 +202,27 @@ export default function TeacherClassManager() {
                     {/* RIGHT COLUMN: Manage Students */}
                     <div className="md:col-span-2 space-y-6">
 
-                        {/* 🚨 NEW STUDENTS NEEDING A CLASS */}
                         {unassignedStudents.length > 0 && (
                             <div className="bg-amber-900/20 border border-amber-500/30 rounded-3xl p-6">
                                 <h2 className="text-xl font-bold text-amber-400 mb-4 flex items-center gap-2">
-                                    <ShieldAlert size={20} /> New Students from Admin
+                                    <ShieldAlert size={20} /> New Students Needing a Class
                                 </h2>
-                                <p className="text-sm text-amber-200 mb-4">These students have been approved by the Admin and sent to you. Please add them to a class.</p>
+                                <p className="text-sm text-amber-200 mb-4">These students are in your roster but not assigned to a specific group yet.</p>
 
                                 <div className="grid sm:grid-cols-2 gap-3">
                                     {unassignedStudents.map(student => (
-                                        <div key={student.id} className="flex items-center justify-between bg-slate-950 p-4 rounded-xl border border-amber-500/20">
+                                        <div key={student.id} className="flex flex-col bg-slate-950 p-4 rounded-xl border border-amber-500/20 gap-3">
                                             <div>
                                                 <span className="font-bold text-white block">{student.full_name}</span>
                                                 <span className="text-xs text-slate-400">{student.class_name}</span>
                                             </div>
-                                            <div className="flex gap-2">
+                                            <div className="flex flex-wrap gap-2">
+                                                {classes.length === 0 && <span className="text-xs text-amber-500">Create a class group first.</span>}
                                                 {classes.map(cls => (
                                                     <button
                                                         key={cls.id}
                                                         onClick={() => assignStudent(student.id, cls.id)}
                                                         className="text-xs bg-amber-600 hover:bg-amber-500 text-white px-3 py-2 rounded-lg font-bold transition-colors"
-                                                        title={`Add to ${cls.name}`}
                                                     >
                                                         + {cls.name}
                                                     </button>
@@ -226,7 +234,6 @@ export default function TeacherClassManager() {
                             </div>
                         )}
 
-                        {/* CLASS GROUPS */}
                         {classes.length === 0 ? (
                             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center">
                                 <p className="text-slate-500">Create a class group first to start organizing your students.</p>
