@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import pptxgen from "pptxgenjs";
 import {
     Sparkles, Presentation, MonitorPlay, LogOut,
     FileText, Loader2, ArrowLeft, Download, Edit3,
-    CheckCircle, Link as LinkIcon, Send, Users, X
+    CheckCircle, Link as LinkIcon, Send, Users, X,
+    Gamepad2 // 🚨 Added Gamepad2 icon for the Arena
 } from "lucide-react";
 import DeckViewer from "@/components/DeckViewer";
 import { createClient } from "@/lib/supabase/client";
@@ -16,34 +17,28 @@ export default function TeacherHub() {
     const router = useRouter();
     const supabase = createClient();
 
+    // Form States
     const [lessonText, setLessonText] = useState("");
     const [gradeLevel, setGradeLevel] = useState("KG1");
     const [curriculum, setCurriculum] = useState("General");
     const [style, setStyle] = useState("3D Pixar");
 
+    // App States
     const [loading, setLoading] = useState(false);
     const [deckData, setDeckData] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
 
+    // Edit & Export States
     const [isEditing, setIsEditing] = useState(false);
     const [activeSlideIndex, setActiveSlideIndex] = useState(0);
     const [isExporting, setIsExporting] = useState(false);
 
-    // 🚨 Publish States
+    // Publish States
     const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
     const [targetType, setTargetType] = useState<'grade' | 'student'>('grade');
     const [targetValue, setTargetValue] = useState("KG1");
     const [studentsList, setStudentsList] = useState<{ id: string, full_name: string }[]>([]);
     const [isPublishing, setIsPublishing] = useState(false);
-
-    // Fetch students for the dropdown
-    useEffect(() => {
-        async function fetchStudents() {
-            const { data } = await supabase.from('children').select('id, full_name').eq('is_approved', true);
-            if (data) setStudentsList(data);
-        }
-        fetchStudents();
-    }, [supabase]);
 
     async function handleGenerate(e: React.FormEvent) {
         e.preventDefault();
@@ -106,7 +101,6 @@ export default function TeacherHub() {
         }
     };
 
-    // 🚨 PUBLISH FUNCTION
     const handlePublish = async () => {
         setIsPublishing(true);
         const { data: { user } } = await supabase.auth.getUser();
@@ -122,7 +116,7 @@ export default function TeacherHub() {
             title: deckData.title || "Untitled Lesson",
             deck_data: deckData,
             target_type: targetType,
-            target_value: targetType === 'grade' ? targetValue : targetValue // If student, targetValue is the ID
+            target_value: targetValue
         });
 
         setIsPublishing(false);
@@ -147,12 +141,23 @@ export default function TeacherHub() {
                         </div>
                         <span className="text-xl font-extrabold text-white tracking-tight">Teacher Hub</span>
                     </div>
+
                     <nav className="px-4 space-y-2 mt-4">
                         <Link href="/teacher" className="flex items-center gap-3 bg-emerald-500/10 text-emerald-400 font-bold px-4 py-3 rounded-xl border border-emerald-500/20">
                             <MonitorPlay size={20} /> AI Presentations
                         </Link>
+
                         <Link href="/teacher/assessments" className="flex items-center gap-3 text-slate-400 hover:text-white hover:bg-slate-800 font-medium px-4 py-3 rounded-xl transition-all">
                             <FileText size={20} /> Assessments
+                        </Link>
+
+                        {/* 🚨 GAME LINK ADDED BACK HERE */}
+                        <Link href="/teacher/arena" className="flex items-center gap-3 text-slate-400 hover:text-white hover:bg-slate-800 font-medium px-4 py-3 rounded-xl transition-all">
+                            <Gamepad2 size={20} /> TBA Arena (Game)
+                        </Link>
+
+                        <Link href="/teacher/library" className="flex items-center gap-3 text-slate-400 hover:text-white hover:bg-slate-800 font-medium px-4 py-3 rounded-xl transition-all">
+                            <Users size={20} /> My Library
                         </Link>
                     </nav>
                 </div>
@@ -163,8 +168,9 @@ export default function TeacherHub() {
                 </div>
             </aside>
 
-            {/* MIDDLE COLUMN - EDITOR */}
+            {/* MIDDLE COLUMN - CREATOR / EDITOR */}
             <main className="w-full md:w-[450px] bg-slate-900/50 border-r border-slate-800 flex flex-col overflow-y-auto relative z-10">
+
                 {isEditing && deckData ? (
                     <div className="p-8 pb-24">
                         <div className="flex justify-between items-center mb-6">
@@ -172,7 +178,7 @@ export default function TeacherHub() {
                                 <Edit3 className="text-emerald-400" /> Slide Editor
                             </h1>
                             <button onClick={() => setIsEditing(false)} className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg transition-all">
-                                <CheckCircle size={16} /> Save
+                                <CheckCircle size={16} /> Done
                             </button>
                         </div>
 
@@ -225,18 +231,18 @@ export default function TeacherHub() {
 
                         <form onSubmit={handleGenerate} className="space-y-5">
                             <div className="grid grid-cols-2 gap-4">
-                                <select value={gradeLevel} onChange={e => setGradeLevel(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3">
+                                <select value={gradeLevel} onChange={e => setGradeLevel(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500">
                                     <option value="Pre-K">Pre-K</option>
                                     <option value="KG1">KG1</option>
                                     <option value="KG2">KG2</option>
                                 </select>
-                                <select value={curriculum} onChange={e => setCurriculum(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3">
+                                <select value={curriculum} onChange={e => setCurriculum(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500">
                                     <option value="General">General</option>
                                     <option value="Montessori">Montessori</option>
                                 </select>
                             </div>
-                            <textarea placeholder="Paste your lesson notes here..." value={lessonText} onChange={e => setLessonText(e.target.value)} required className="w-full h-48 bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 resize-none text-sm" />
-                            <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-extrabold text-lg py-4 rounded-xl shadow-lg flex items-center justify-center gap-2">
+                            <textarea placeholder="Paste your lesson notes here..." value={lessonText} onChange={e => setLessonText(e.target.value)} required className="w-full h-48 bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 resize-none text-sm outline-none focus:border-emerald-500" />
+                            <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-extrabold text-lg py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 disabled:opacity-50">
                                 {loading ? <><Loader2 className="animate-spin w-5 h-5" /> Generating...</> : <><Sparkles className="w-5 h-5" /> Generate Presentation</>}
                             </button>
                         </form>
@@ -247,7 +253,10 @@ export default function TeacherHub() {
             {/* PREVIEW AREA */}
             <section className="flex-1 relative bg-slate-950 hidden lg:flex items-center justify-center p-8">
                 {loading ? (
-                    <div className="text-emerald-500 animate-pulse font-bold text-xl">AI is designing...</div>
+                    <div className="text-emerald-500 animate-pulse font-bold text-xl flex flex-col items-center">
+                        <Loader2 className="animate-spin w-10 h-10 mb-4" />
+                        AI is designing your slides...
+                    </div>
                 ) : deckData ? (
                     <div className="w-full h-full max-w-6xl rounded-3xl overflow-hidden shadow-2xl border border-slate-800 relative bg-slate-900">
                         <button onClick={() => setIsEditing(!isEditing)} className="absolute top-6 right-6 z-50 bg-indigo-600/90 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2">
@@ -259,6 +268,7 @@ export default function TeacherHub() {
                     <div className="text-center text-slate-600">
                         <MonitorPlay size={80} className="mx-auto mb-6 opacity-20" />
                         <h2 className="text-2xl font-bold text-slate-500">Preview</h2>
+                        <p className="text-slate-500 mt-2 max-w-sm">Your presentation will appear here.</p>
                     </div>
                 )}
             </section>
@@ -275,33 +285,20 @@ export default function TeacherHub() {
                                 <label className="block text-sm font-bold text-slate-400 mb-2">Send To:</label>
                                 <select value={targetType} onChange={(e: any) => setTargetType(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3">
                                     <option value="grade">A Specific Grade</option>
-                                    <option value="student">One Specific Student</option>
                                 </select>
                             </div>
 
-                            {targetType === 'grade' ? (
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-400 mb-2">Select Grade:</label>
-                                    <select value={targetValue} onChange={(e) => setTargetValue(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3">
-                                        <option value="Pre-K">Pre-K</option>
-                                        <option value="KG1">KG1</option>
-                                        <option value="KG2">KG2</option>
-                                    </select>
-                                </div>
-                            ) : (
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-400 mb-2">Select Student:</label>
-                                    <select value={targetValue} onChange={(e) => setTargetValue(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3">
-                                        <option value="">Choose a student...</option>
-                                        {studentsList.map(s => (
-                                            <option key={s.id} value={s.id}>{s.full_name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
+                            <div>
+                                <label className="block text-sm font-bold text-slate-400 mb-2">Select Grade:</label>
+                                <select value={targetValue} onChange={(e) => setTargetValue(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3">
+                                    <option value="Pre-K">Pre-K</option>
+                                    <option value="KG1">KG1</option>
+                                    <option value="KG2">KG2</option>
+                                </select>
+                            </div>
                         </div>
 
-                        <button onClick={handlePublish} disabled={isPublishing || (targetType === 'student' && !targetValue)} className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 disabled:opacity-50">
+                        <button onClick={handlePublish} disabled={isPublishing} className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 disabled:opacity-50">
                             {isPublishing ? <Loader2 className="animate-spin" /> : <Users size={20} />}
                             {isPublishing ? "Publishing..." : "Send to Students"}
                         </button>
