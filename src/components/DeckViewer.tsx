@@ -26,7 +26,7 @@ export default function DeckViewer({
 
     const setCurrentSlide = (val: number | ((prev: number) => number)) => {
         const newVal = typeof val === 'function' ? val(currentSlide) : val;
-        // 🚨 If it's a student, they can NEVER go past the current teacher slide
+        // 🚨 ONLY lock the student view from going forward
         if (isStudentView && newVal > currentSlide) return;
 
         if (externalSlide !== undefined && onSlideChange) {
@@ -43,7 +43,7 @@ export default function DeckViewer({
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            // 🚨 Students cannot use arrow keys to go forward
+            // 🚨 Students can only go backward via keys
             if (isStudentView) {
                 if (e.key === "ArrowLeft") {
                     e.preventDefault();
@@ -61,8 +61,8 @@ export default function DeckViewer({
                 setCurrentSlide((prev) => Math.max(prev - 1, 0));
             }
         };
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
     }, [deck.slides.length, currentSlide, isStudentView]);
 
     const slide = deck.slides[currentSlide];
@@ -137,7 +137,7 @@ export default function DeckViewer({
                 </div>
             </div>
 
-            <div className="p-6 bg-slate-900/50 backdrop-blur-md border-t border-slate-800 flex justify-between items-center">
+            <div className="p-6 bg-slate-900/50 backdrop-blur-md border-t border-slate-800 flex justify-between items-center z-50">
                 <div className="flex gap-2">
                     {deck.slides.map((_: any, i: number) => (
                         <div key={i} className={`h-2 rounded-full transition-all duration-300 ${i === currentSlide ? 'w-8 bg-emerald-500' : 'w-2 bg-slate-700'}`} />
@@ -156,7 +156,7 @@ export default function DeckViewer({
                         {currentSlide + 1} / {deck.slides.length}
                     </span>
 
-                    {/* 🚨 Hide Next Button for students */}
+                    {/* Hide Next Button for students */}
                     {!isStudentView && (
                         <button
                             onClick={() => setCurrentSlide((p) => Math.min(p + 1, deck.slides.length - 1))}

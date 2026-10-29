@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import DeckViewer from "@/components/DeckViewer";
-import { StopCircle, Loader2, MousePointer2, PenTool, Trash2, Type, Users, CheckCircle, XCircle } from "lucide-react";
+import { StopCircle, Loader2, MousePointer2, PenTool, Trash2, Type, Users, CheckCircle, XCircle, ArrowLeft, ArrowRight } from "lucide-react";
 
 export default function TeacherLivePresenter() {
     const router = useRouter();
@@ -23,7 +23,7 @@ export default function TeacherLivePresenter() {
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const laserCanvasRef = useRef<HTMLCanvasElement>(null);
-    const containerRef = useRef<HTMLDivElement>(null); // 🚨 For exact sizing
+    const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
     // Attendance State
@@ -88,7 +88,6 @@ export default function TeacherLivePresenter() {
             if (!pres) return router.push("/teacher/library");
             setPresentation(pres);
 
-            // Fetch All Students for Excuse List
             const { data: studentsData } = await supabase.from("children").select("id, full_name").eq("teacher_id", user.id);
             if (studentsData) setAllStudents(studentsData);
 
@@ -125,6 +124,17 @@ export default function TeacherLivePresenter() {
             if (channelRef.current) supabase.removeChannel(channelRef.current);
         };
     }, [presentationId, supabase, router]);
+
+    // 🚨 Handle Slide Navigation (Works for both AI and PPTX)
+    const handleSlideChange = async (newSlide: number) => {
+        if (!presentation.deck_data) return; // If PPTX, use native controls
+        const maxSlides = presentation.deck_data.slides.length;
+        const target = Math.max(0, Math.min(newSlide, maxSlides - 1));
+
+        setCurrentSlide(target);
+        clearCanvas();
+        if (sessionId) await supabase.from("live_sessions").update({ current_slide: target }).eq("id", sessionId);
+    };
 
     const handleMouseMove = (e: React.MouseEvent) => {
         const rect = containerRef.current?.getBoundingClientRect();
@@ -198,17 +208,9 @@ export default function TeacherLivePresenter() {
         channelRef.current?.send({ type: 'broadcast', event: 'clear' });
     };
 
-    const handleSlideChange = async (newSlide: number) => {
-        setCurrentSlide(newSlide);
-        clearCanvas();
-        if (sessionId) await supabase.from("live_sessions").update({ current_slide: newSlide }).eq("id", sessionId);
-    };
-
-    // 🚨 End Session & Log Attendance
     const endLiveSession = async () => {
         if (!sessionId) return;
 
-        // Save attendance to DB for permanent record
         const presentIds = attendance.map((a: any) => a.key);
         const records = allStudents.map(s => ({
             session_id: sessionId,
@@ -237,12 +239,23 @@ export default function TeacherLivePresenter() {
                     LIVE: {presentation.title}
                 </div>
 
-                <div className="flex gap-2 bg-black/30 p-2 rounded-xl">
-                    <button onClick={() => setTool('none')} className={`p-2 rounded-lg ${tool === 'none' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><MousePointer2 size={20} /></button>
-                    <button onClick={() => setTool('laser')} className={`p-2 rounded-lg ${tool === 'laser' ? 'bg-red-500 text-white' : 'hover:bg-white/20'}`}><div className="w-5 h-5 bg-red-400 rounded-full animate-pulse" /></button>
-                    <button onClick={() => setTool('pen')} className={`p-2 rounded-lg ${tool === 'pen' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><PenTool size={20} /></button>
-                    <button onClick={() => setTool('text')} className={`p-2 rounded-lg ${tool === 'text' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><Type size={20} /></button>
-                    <button onClick={clearCanvas} className="p-2 rounded-lg hover:bg-white/20 text-red-200"><Trash2 size={20} /></button>
+                <div className="flex items-center gap-4">
+                    {/* 🚨 Slide Controls for AI Presentations */}
+                    {!presentation.file_url && presentation.deck_data?.slides && (
+                        <div className="flex gap-2 bg-black/30 p-2 rounded-xl">
+                            <button onClick={() => handleSlideChange(currentSlide - 1)} disabled={currentSlide === 0} className="p-2 rounded-lg hover:bg-white/20 disabled:opacity-30"><ArrowLeft size={20} /></button>
+                            <span className="font-bold text-sm flex items-center px-2">{currentSlide + 1} / {presentation.deck_data.slides.length}</span>
+                            <button onClick={() => handleSlideChange(currentSlide + 1)} disabled={currentSlide === presentation.deck_data.slides.length - 1} className="p-2 rounded-lg hover:bg-white/20 disabled:opacity-30"><ArrowRight size={20} /></button>
+                        </div>
+                    )}
+
+                    <div className="flex gap-2 bg-black/30 p-2 rounded-xl">
+                        <button onClick={() => setTool('none')} className={`p-2 rounded-lg ${tool === 'none' ? 'bg-white text-black' : 'hover:bg-white/20'}`} title="Pointer (Click PowerPoints)"><MousePointer2 size={20} /></button>
+                        <button onClick={() => setTool('laser')} className={`p-2 rounded-lg ${tool === 'laser' ? 'bg-red-500 text-white' : 'hover:bg-white/20'}`} title="Laser Pointer"><div className="w-5 h-5 bg-red-400 rounded-full animate-pulse" /></button>
+                        <button onClick={() => setTool('pen')} className={`p-2 rounded-lg ${tool === 'pen' ? 'bg-white text-black' : 'hover:bg-white/20'}`} title="Pen Tool"><PenTool size={20} /></button>
+                        <button onClick={() => setTool('text')} className={`p-2 rounded-lg ${tool === 'text' ? 'bg-white text-black' : 'hover:bg-white/20'}`} title="Text Tool"><Type size={20} /></button>
+                        <button onClick={clearCanvas} className="p-2 rounded-lg hover:bg-white/20 text-red-200" title="Clear Drawings"><Trash2 size={20} /></button>
+                    </div>
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -261,12 +274,20 @@ export default function TeacherLivePresenter() {
                 onMouseDown={startDraw}
                 onMouseUp={stopDraw}
                 onMouseLeave={stopDraw}
-                ref={containerRef} // 🚨 Map to this container
+                ref={containerRef}
             >
                 {presentation.file_url ? (
-                    <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(presentation.file_url)}`} className="w-full h-full border-none pointer-events-none" />
+                    <iframe
+                        src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(presentation.file_url)}`}
+                        // 🚨 Make interactive only when pointer is selected
+                        className={`w-full h-full border-none ${tool === 'none' ? 'pointer-events-auto' : 'pointer-events-none'}`}
+                    />
                 ) : (
-                    <DeckViewer deck={presentation.deck_data} externalSlide={currentSlide} onSlideChange={handleSlideChange} />
+                    <DeckViewer
+                        deck={presentation.deck_data}
+                        externalSlide={currentSlide}
+                        onSlideChange={handleSlideChange}
+                    />
                 )}
 
                 <canvas ref={canvasRef} className="absolute inset-0 z-40 pointer-events-none" />
@@ -281,7 +302,6 @@ export default function TeacherLivePresenter() {
                         <p className="text-slate-400 mb-6">Review attendance. Absent students will not receive the presentation unless marked as excused.</p>
 
                         <div className="grid md:grid-cols-2 gap-6 mb-8">
-                            {/* Present */}
                             <div className="bg-emerald-950/30 border border-emerald-900/50 rounded-2xl p-4">
                                 <h3 className="text-emerald-400 font-bold flex items-center gap-2 mb-4"><CheckCircle size={18} /> Attended ({attendance.length})</h3>
                                 <div className="space-y-2 max-h-40 overflow-y-auto">
@@ -292,7 +312,6 @@ export default function TeacherLivePresenter() {
                                 </div>
                             </div>
 
-                            {/* Absent */}
                             <div className="bg-red-950/30 border border-red-900/50 rounded-2xl p-4">
                                 <h3 className="text-red-400 font-bold flex items-center gap-2 mb-4"><XCircle size={18} /> Absent ({absentStudents.length})</h3>
                                 <div className="space-y-2 max-h-40 overflow-y-auto">
