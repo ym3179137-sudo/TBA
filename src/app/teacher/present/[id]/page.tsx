@@ -4,7 +4,12 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import DeckViewer from "@/components/DeckViewer";
 
-export default async function TeacherPresentPage({ params }: { params: { id: string } }) {
+// 🚨 Next.js 16 requires params to be typed as a Promise
+export default async function TeacherPresentPage({ params }: { params: Promise<{ id: string }> }) {
+    // Await the params to get the ID
+    const resolvedParams = await params;
+    const presentationId = resolvedParams.id;
+
     const supabaseAdmin = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -13,9 +18,10 @@ export default async function TeacherPresentPage({ params }: { params: { id: str
     const { data: presentation } = await supabaseAdmin
         .from("presentations")
         .select("deck_data, title, file_url")
-        .eq("id", params.id)
+        .eq("id", presentationId)
         .single();
 
+    // If no presentation is found, show the 404 page
     if (!presentation) return notFound();
 
     // If it's an uploaded PowerPoint, use Google Docs Viewer to embed it
@@ -25,7 +31,7 @@ export default async function TeacherPresentPage({ params }: { params: { id: str
         return (
             <div className="h-screen w-screen bg-slate-950 flex flex-col">
                 <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center gap-4">
-                    <Link href="/teacher/library" className="text-slate-400 hover:text-white flex items-center gap-2 font-bold bg-slate-800 px-4 py-2 rounded-xl">
+                    <Link href="/teacher/library" className="text-slate-400 hover:text-white flex items-center gap-2 font-bold bg-slate-800 px-4 py-2 rounded-xl transition-colors">
                         <ArrowLeft size={16} /> Exit Presentation
                     </Link>
                     <h1 className="text-white font-extrabold">{presentation.title}</h1>
