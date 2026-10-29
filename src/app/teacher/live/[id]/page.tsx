@@ -17,7 +17,6 @@ export default function TeacherLivePresenter() {
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // Tools & Drawing State
     const [tool, setTool] = useState<'none' | 'laser' | 'pen' | 'text'>('pen');
     const [isDrawing, setIsDrawing] = useState(false);
 
@@ -26,13 +25,13 @@ export default function TeacherLivePresenter() {
     const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
-    // Attendance State
-    const [attendance, setAttendance] = useState<any[]>([]);
+    // 🚨 Attendance State
+    const [attendance, setAttendance] = useState<any[]>([]); // 🚨 Read from DB
     const [allStudents, setAllStudents] = useState<any[]>([]);
     const [showEndModal, setShowEndModal] = useState(false);
     const [excusedIds, setExcusedIds] = useState<string[]>([]);
 
-    // 🚨 Fix Canvas Sizing
+    // Fix Canvas Sizing
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
@@ -46,7 +45,7 @@ export default function TeacherLivePresenter() {
         return () => window.removeEventListener('resize', updateSize);
     }, [loading]);
 
-    // 🚨 Smooth Laser Trace Loop
+    // Smooth Laser Trace
     const laserPoints = useRef<{ x: number; y: number; life: number }[]>([]);
     useEffect(() => {
         let animationFrameId: number;
@@ -99,22 +98,23 @@ export default function TeacherLivePresenter() {
 
             if (session) {
                 setSessionId(session.id);
-                channelRef.current = supabase.channel(`live-room-${session.id}`, {
-                    config: { presence: { key: user.id } }
-                });
 
-                channelRef.current
-                    .on('presence', { event: 'sync' }, () => {
-                        const state = channelRef.current.presenceState();
-                        const users = Object.values(state).flat();
-                        const students = users.filter((u: any) => u.role === 'student');
-                        setAttendance(students);
-                    })
-                    .subscribe(async (status: string) => {
-                        if (status === 'SUBSCRIBED') {
-                            await channelRef.current.track({ role: 'teacher', name: 'Teacher' });
-                        }
-                    });
+                // 🚨 Listen to Attendance Table for late joiners
+                const attendChannel = supabase.channel(`attendance-${session.id}`)
+                    .on('postgres_changes', {
+                        event: '*', schema: 'public', table: 'live_attendance', filter: `session_id=eq.${session.id}`
+                    }, async () => {
+                        // Re-fetch the entire list whenever someone joins
+                        const { data } = await supabase.from("live_attendance").select("*").eq("session_id", session.id);
+                        if (data) setAttendance(data);
+                    }).subscribe();
+
+                // Fetch initial attendance
+                const { data: initialAttend } = await supabase.from("live_attendance").select("*").eq("session_id", session.id);
+                if (initialAttend) setAttendance(initialAttend);
+
+                // Setup realtime broadcast for drawing
+                channelRef.current = supabase.channel(`live-room-${session.id}`).subscribe();
             }
             setLoading(false);
         }
@@ -125,9 +125,8 @@ export default function TeacherLivePresenter() {
         };
     }, [presentationId, supabase, router]);
 
-    // 🚨 Handle Slide Navigation (Works for both AI and PPTX)
     const handleSlideChange = async (newSlide: number) => {
-        if (!presentation.deck_data) return; // If PPTX, use native controls
+        if (!presentation.deck_data) return;
         const maxSlides = presentation.deck_data.slides.length;
         const target = Math.max(0, Math.min(newSlide, maxSlides - 1));
 
@@ -211,16 +210,11 @@ export default function TeacherLivePresenter() {
     const endLiveSession = async () => {
         if (!sessionId) return;
 
-        const presentIds = attendance.map((a: any) => a.key);
-        const records = allStudents.map(s => ({
-            session_id: sessionId,
-            student_id: s.id,
-            student_name: s.full_name,
-            is_present: presentIds.includes(s.id),
-            is_excused: excusedIds.includes(s.id)
-        }));
+        // 🚨 Update excuses in DB
+        for (const sId of excusedIds) {
+            await supabase.from("live_attendance").update({ is_excused: true }).eq("session_id", sessionId).eq("student_id", sId);
+        }
 
-        await supabase.from("live_attendance").insert(records);
         await supabase.from("live_sessions").update({ is_active: false }).eq("id", sessionId);
         router.push("/teacher/library");
     };
@@ -229,7 +223,10 @@ export default function TeacherLivePresenter() {
         return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
     }
 
-    const absentStudents = allStudents.filter(s => !attendance.some((a: any) => a.key === s.id));
+    // 🚨 Attended list comes from the DB (so late joiners are included)
+    const attendedIds = attendance.map((a: any) => a.student_id);
+    // Absent list is everyone else
+    const absentStudents = allStudents.filter(s => !attendedIds.includes(s.id));
 
     return (
         <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden relative select-none">
@@ -240,7 +237,6 @@ export default function TeacherLivePresenter() {
                 </div>
 
                 <div className="flex items-center gap-4">
-                    {/* 🚨 Slide Controls for AI Presentations */}
                     {!presentation.file_url && presentation.deck_data?.slides && (
                         <div className="flex gap-2 bg-black/30 p-2 rounded-xl">
                             <button onClick={() => handleSlideChange(currentSlide - 1)} disabled={currentSlide === 0} className="p-2 rounded-lg hover:bg-white/20 disabled:opacity-30"><ArrowLeft size={20} /></button>
@@ -250,11 +246,11 @@ export default function TeacherLivePresenter() {
                     )}
 
                     <div className="flex gap-2 bg-black/30 p-2 rounded-xl">
-                        <button onClick={() => setTool('none')} className={`p-2 rounded-lg ${tool === 'none' ? 'bg-white text-black' : 'hover:bg-white/20'}`} title="Pointer (Click PowerPoints)"><MousePointer2 size={20} /></button>
-                        <button onClick={() => setTool('laser')} className={`p-2 rounded-lg ${tool === 'laser' ? 'bg-red-500 text-white' : 'hover:bg-white/20'}`} title="Laser Pointer"><div className="w-5 h-5 bg-red-400 rounded-full animate-pulse" /></button>
-                        <button onClick={() => setTool('pen')} className={`p-2 rounded-lg ${tool === 'pen' ? 'bg-white text-black' : 'hover:bg-white/20'}`} title="Pen Tool"><PenTool size={20} /></button>
-                        <button onClick={() => setTool('text')} className={`p-2 rounded-lg ${tool === 'text' ? 'bg-white text-black' : 'hover:bg-white/20'}`} title="Text Tool"><Type size={20} /></button>
-                        <button onClick={clearCanvas} className="p-2 rounded-lg hover:bg-white/20 text-red-200" title="Clear Drawings"><Trash2 size={20} /></button>
+                        <button onClick={() => setTool('none')} className={`p-2 rounded-lg ${tool === 'none' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><MousePointer2 size={20} /></button>
+                        <button onClick={() => setTool('laser')} className={`p-2 rounded-lg ${tool === 'laser' ? 'bg-red-500 text-white' : 'hover:bg-white/20'}`}><div className="w-5 h-5 bg-red-400 rounded-full animate-pulse" /></button>
+                        <button onClick={() => setTool('pen')} className={`p-2 rounded-lg ${tool === 'pen' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><PenTool size={20} /></button>
+                        <button onClick={() => setTool('text')} className={`p-2 rounded-lg ${tool === 'text' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><Type size={20} /></button>
+                        <button onClick={clearCanvas} className="p-2 rounded-lg hover:bg-white/20 text-red-200"><Trash2 size={20} /></button>
                     </div>
                 </div>
 
@@ -277,36 +273,27 @@ export default function TeacherLivePresenter() {
                 ref={containerRef}
             >
                 {presentation.file_url ? (
-                    <iframe
-                        src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(presentation.file_url)}`}
-                        // 🚨 Make interactive only when pointer is selected
-                        className={`w-full h-full border-none ${tool === 'none' ? 'pointer-events-auto' : 'pointer-events-none'}`}
-                    />
+                    <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(presentation.file_url)}`} className={`w-full h-full border-none ${tool === 'none' ? 'pointer-events-auto' : 'pointer-events-none'}`} />
                 ) : (
-                    <DeckViewer
-                        deck={presentation.deck_data}
-                        externalSlide={currentSlide}
-                        onSlideChange={handleSlideChange}
-                    />
+                    <DeckViewer deck={presentation.deck_data} externalSlide={currentSlide} onSlideChange={handleSlideChange} />
                 )}
 
                 <canvas ref={canvasRef} className="absolute inset-0 z-40 pointer-events-none" />
                 <canvas ref={laserCanvasRef} className="absolute inset-0 z-50 pointer-events-none" />
             </div>
 
-            {/* 🚨 ATTENDANCE MODAL */}
             {showEndModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
                     <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-3xl shadow-2xl p-8">
                         <h2 className="text-3xl font-extrabold text-white mb-2">End Live Session</h2>
-                        <p className="text-slate-400 mb-6">Review attendance. Absent students will not receive the presentation unless marked as excused.</p>
+                        <p className="text-slate-400 mb-6">Review attendance. Late joiners are marked as attended.</p>
 
                         <div className="grid md:grid-cols-2 gap-6 mb-8">
                             <div className="bg-emerald-950/30 border border-emerald-900/50 rounded-2xl p-4">
                                 <h3 className="text-emerald-400 font-bold flex items-center gap-2 mb-4"><CheckCircle size={18} /> Attended ({attendance.length})</h3>
                                 <div className="space-y-2 max-h-40 overflow-y-auto">
                                     {attendance.map((a: any) => (
-                                        <div key={a.key} className="bg-slate-950 p-2 rounded-lg text-sm text-slate-300">{a.name}</div>
+                                        <div key={a.student_id} className="bg-slate-950 p-2 rounded-lg text-sm text-slate-300">{a.student_name}</div>
                                     ))}
                                     {attendance.length === 0 && <p className="text-slate-500 text-sm">No one joined.</p>}
                                 </div>

@@ -13,7 +13,7 @@ export default function StudentClassroom() {
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const laserCanvasRef = useRef<HTMLCanvasElement>(null);
-    const containerRef = useRef<HTMLDivElement>(null); // 🚨 Map to this container
+    const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
     // 🚨 Fix Canvas Sizing
@@ -30,7 +30,7 @@ export default function StudentClassroom() {
         return () => window.removeEventListener('resize', updateSize);
     }, [loading]);
 
-    // 🚨 Smooth Laser Trace Loop
+    // Smooth Laser Trace
     const laserPoints = useRef<{ x: number; y: number; life: number }[]>([]);
     useEffect(() => {
         let animationFrameId: number;
@@ -78,6 +78,13 @@ export default function StudentClassroom() {
                 if (pres) {
                     setLiveData({ ...data[0], presentation: pres });
                     subscribeToChannel(data[0].id, studentId, studentName);
+
+                    // 🚨 LOG ATTENDANCE (Late joiners are tracked here too)
+                    await supabase.from("live_attendance").upsert({
+                        session_id: data[0].id,
+                        student_id: studentId,
+                        student_name: studentName
+                    }, { onConflict: 'session_id,student_id' });
                 }
             }
             setLoading(false);
@@ -91,7 +98,15 @@ export default function StudentClassroom() {
                     const { data: pres } = await supabase.from("presentations").select("deck_data, title, file_url").eq("id", session.presentation_id).single();
                     if (pres) {
                         setLiveData({ ...session, presentation: pres });
-                        if (!channelRef.current) subscribeToChannel(session.id, studentId, studentName);
+                        if (!channelRef.current) {
+                            subscribeToChannel(session.id, studentId, studentName);
+                            // Log attendance if they join mid-session
+                            await supabase.from("live_attendance").upsert({
+                                session_id: session.id,
+                                student_id: studentId,
+                                student_name: studentName
+                            }, { onConflict: 'session_id,student_id' });
+                        }
                     }
                 } else {
                     setLiveData(null);
@@ -156,11 +171,7 @@ export default function StudentClassroom() {
             })
             .subscribe(async (status: string) => {
                 if (status === 'SUBSCRIBED') {
-                    await channelRef.current.track({
-                        role: 'student',
-                        name: studentName,
-                        joined_at: new Date().toISOString()
-                    });
+                    await channelRef.current.track({ role: 'student', name: studentName });
                 }
             });
     }
