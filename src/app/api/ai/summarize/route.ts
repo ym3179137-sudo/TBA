@@ -1,26 +1,34 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
-    const { transcript } = await req.json();
+    try {
+        // 🚨 Point OpenAI SDK to OpenRouter using YOUR key
+        const openai = new OpenAI({
+            apiKey: process.env.OPENROUTER_API_KEY,
+            baseURL: "https://openrouter.ai/api/v1"
+        });
 
-    const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini", // Cost-effective for summarization
-        messages: [
-            {
-                role: "system",
-                content: "You are an AI assistant for a school. Analyze the following transcript and generate: 1. A short summary. 2. Key action items. 3. A list of who said what (speaker diarization). Format as Markdown."
-            },
-            { role: "user", content: transcript }
-        ],
-    });
+        const { transcript } = await req.json();
 
-    const aiNotes = response.choices[0].message.content;
+        const response = await openai.chat.completions.create({
+            model: "openai/gpt-4o-mini", // OpenRouter requires the 'openai/' prefix
+            messages: [
+                {
+                    role: "system",
+                    content: "You are an AI assistant for a school. Analyze the following transcript and generate: 1. A short summary. 2. Key action items. 3. A list of who said what (speaker diarization). Format as Markdown."
+                },
+                { role: "user", content: transcript }
+            ],
+        });
 
-    // 🛡️ Save notes to your database (e.g., a `meeting_notes` table)
-    // await supabase.from("meeting_notes").insert({ ... });
+        const aiNotes = response.choices[0].message.content;
 
-    return NextResponse.json({ notes: aiNotes });
+        return NextResponse.json({ notes: aiNotes });
+    } catch (error: any) {
+        console.error("OpenRouter Error:", error);
+        return NextResponse.json({ error: error.message || "Failed to generate notes" }, { status: 500 });
+    }
 }
