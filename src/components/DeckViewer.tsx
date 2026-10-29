@@ -16,7 +16,15 @@ export default function DeckViewer({
     const [imgLoading, setImgLoading] = useState(true);
     const [imgError, setImgError] = useState(false);
 
-    // Determine which slide to show
+    // 🚨 Safety check: If there is no deck data, don't crash
+    if (!deck || !deck.slides || deck.slides.length === 0) {
+        return (
+            <div className="flex h-full w-full items-center justify-center bg-slate-950 text-slate-500 font-bold p-8 text-center rounded-3xl">
+                This presentation has no slide data.
+            </div>
+        );
+    }
+
     const currentSlide = externalSlide !== undefined ? externalSlide : internalSlide;
 
     const setCurrentSlide = (val: number | ((prev: number) => number)) => {
@@ -77,7 +85,7 @@ export default function DeckViewer({
                     </h1>
 
                     <ul className={`space-y-4 ${layout === 'centered' ? 'inline-block text-left' : ''}`}>
-                        {slide.bullets.map((b: string, i: number) => (
+                        {slide.bullets?.map((b: string, i: number) => (
                             <li key={i} className="text-xl md:text-2xl font-medium text-slate-300 flex items-start gap-3">
                                 <span className="mt-2 w-2 h-2 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_10px_rgba(52,211,153,0.8)]"></span>
                                 <span>{b}</span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import DeckViewer from "@/components/DeckViewer";
@@ -8,17 +8,17 @@ import { StopCircle, Loader2 } from "lucide-react";
 
 export default function TeacherLivePresenter() {
     const router = useRouter();
-    const params = useParams(); // Safely gets the ID
-    const presentationId = params.id as string;
+    const params = useParams();
+    const presentationId = params?.id as string;
 
-    const supabase = createClient();
+    // 🚨 Memoize the client to prevent infinite loops
+    const supabase = useMemo(() => createClient(), []);
 
     const [presentation, setPresentation] = useState<any>(null);
     const [currentSlide, setCurrentSlide] = useState(0);
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // Start live session on mount
     useEffect(() => {
         if (!presentationId) return;
 
@@ -43,7 +43,7 @@ export default function TeacherLivePresenter() {
 
             setPresentation(pres);
 
-            // 2. End any old active sessions for this teacher to prevent conflicts
+            // 2. End any old active sessions for this teacher
             await supabase
                 .from("live_sessions")
                 .update({ is_active: false })
@@ -69,7 +69,6 @@ export default function TeacherLivePresenter() {
         startLive();
     }, [presentationId, supabase, router]);
 
-    // Update DB when slide changes
     const handleSlideChange = async (newSlide: number) => {
         setCurrentSlide(newSlide);
         if (sessionId) {
@@ -101,7 +100,6 @@ export default function TeacherLivePresenter() {
 
     return (
         <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden">
-            {/* Top Red Live Banner */}
             <div className="p-4 bg-red-600 text-white flex justify-between items-center z-50 shadow-lg shadow-red-900/20">
                 <div className="flex items-center gap-3 font-bold text-lg">
                     <span className="relative flex h-3 w-3">
@@ -118,14 +116,22 @@ export default function TeacherLivePresenter() {
                 </button>
             </div>
 
-            {/* Presentation Area */}
-            <div className="flex-1 overflow-hidden">
-                <DeckViewer
-                    deck={presentation.deck_data}
-                    externalSlide={currentSlide}
-                    onSlideChange={handleSlideChange}
-                />
+            {/* 🚨 If it's a PowerPoint, use Microsoft Viewer. Otherwise, use DeckViewer. */}
+            <div className="flex-1 overflow-hidden bg-white">
+                {presentation.file_url ? (
+                    <iframe
+                        src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(presentation.file_url)}`}
+                        className="w-full h-full border-none"
+                        title="PowerPoint Viewer"
+                    />
+                ) : (
+                    <DeckViewer
+                        deck={presentation.deck_data}
+                        externalSlide={currentSlide}
+                        onSlideChange={handleSlideChange}
+                    />
+                )}
             </div>
         </div>
     );
-}
+}   
