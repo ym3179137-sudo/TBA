@@ -16,7 +16,7 @@ export default function TeacherAssessmentsPage() {
     const [assignments, setAssignments] = useState<any[]>([]);
     const [submissions, setSubmissions] = useState<any[]>([]);
 
-    // Class mapping
+    // Class mapping and list
     const [classes, setClasses] = useState<Record<string, string>>({});
     const [classesList, setClassesList] = useState<any[]>([]);
 
@@ -24,10 +24,10 @@ export default function TeacherAssessmentsPage() {
     const [selectedSubmission, setSelectedSubmission] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // 🚨 Edit Class Modal States
+    // 🚨 Edit Multiple Classes States
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [assignmentToEdit, setAssignmentToEdit] = useState<any>(null);
-    const [newClassId, setNewClassId] = useState("");
+    const [newSelectedClassIds, setNewSelectedClassIds] = useState<string[]>([]);
     const [isUpdating, setIsUpdating] = useState(false);
 
     useEffect(() => {
@@ -45,10 +45,10 @@ export default function TeacherAssessmentsPage() {
             .eq("teacher_id", user.id);
 
         if (classData) {
-            setClassesList(classData); // Store array for dropdown
+            setClassesList(classData);
             const classMap: Record<string, string> = {};
             classData.forEach(c => classMap[c.id] = c.name);
-            setClasses(classMap); // Store map for quick lookup
+            setClasses(classMap);
         }
 
         // 2. Fetch Teacher's Assignments
@@ -78,29 +78,37 @@ export default function TeacherAssessmentsPage() {
         setLoading(false);
     }
 
-    // 🚨 Handle updating the class for an old assignment
+    // Toggle a class in the edit modal
+    const toggleEditClass = (id: string) => {
+        setNewSelectedClassIds(prev =>
+            prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
+        );
+    };
+
+    // Save the edited classes
     const handleUpdateClass = async () => {
         if (!assignmentToEdit) return;
         setIsUpdating(true);
 
         const { error } = await supabase
             .from("assignments")
-            .update({ target_class_id: newClassId || null })
+            .update({ target_class_ids: newSelectedClassIds })
             .eq("id", assignmentToEdit.id);
 
         setIsUpdating(false);
 
         if (error) {
-            alert("Failed to update class: " + error.message);
+            alert("Failed to update classes: " + error.message);
         } else {
             setIsEditModalOpen(false);
-            fetchData(); // Refresh list to show new class name
+            fetchData(); // Refresh to show new classes
         }
     };
 
     const openEditModal = (assign: any) => {
         setAssignmentToEdit(assign);
-        setNewClassId(assign.target_class_id || "");
+        // If the assignment already has classes, load them. Otherwise, start empty.
+        setNewSelectedClassIds(assign.target_class_ids || []);
         setIsEditModalOpen(true);
     };
 
@@ -135,15 +143,18 @@ export default function TeacherAssessmentsPage() {
                 ) : (
                     <div className="flex flex-col lg:flex-row gap-8 flex-1">
 
+                        {/* LEFT: Assignment List */}
                         <div className="w-full lg:w-1/3 space-y-4">
                             <h2 className="text-xl font-bold text-white mb-4">Your Assignments</h2>
                             {assignments.map(assign => {
                                 const subCount = submissions.filter(s => s.assignment_id === assign.id).length;
                                 const isSelected = selectedAssignment?.id === assign.id;
 
-                                const className = assign.target_class_id
-                                    ? classes[assign.target_class_id] || "Unknown Class"
-                                    : "Unassigned";
+                                // Map the array of class IDs to names
+                                const assignedClassNames = (assign.target_class_ids || [])
+                                    .map((id: string) => classes[id])
+                                    .filter(Boolean)
+                                    .join(", ");
 
                                 return (
                                     <div
@@ -160,14 +171,14 @@ export default function TeacherAssessmentsPage() {
                                         </div>
                                         <div className="flex items-center gap-2 text-xs font-bold text-slate-400 flex-wrap">
 
-                                            {/* 🚨 CLICKABLE BADGE TO EDIT CLASS */}
+                                            {/* Clickable badge to edit classes */}
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); openEditModal(assign); }}
-                                                className={`px-2 py-1 rounded-md flex items-center gap-1 hover:bg-slate-700 transition-colors ${className === 'Unassigned' ? 'bg-amber-900/30 text-amber-500 border border-amber-500/30' : 'bg-slate-950 border border-slate-700'
+                                                className={`px-2 py-1 rounded-md flex items-center gap-1 hover:bg-slate-700 transition-colors ${!assignedClassNames ? 'bg-amber-900/30 text-amber-500 border border-amber-500/30' : 'bg-slate-950 border border-slate-700'
                                                     }`}
-                                                title="Click to change class"
+                                                title="Click to change assigned classes"
                                             >
-                                                Class: {className} <Edit size={12} />
+                                                Classes: {assignedClassNames || "Unassigned"} <Edit size={12} />
                                             </button>
 
                                             <span className="bg-slate-950 px-2 py-1 rounded-md">{subCount} Submissions</span>
@@ -183,6 +194,7 @@ export default function TeacherAssessmentsPage() {
                             })}
                         </div>
 
+                        {/* RIGHT: Submissions List */}
                         <div className="w-full lg:w-2/3">
                             {!selectedAssignment ? (
                                 <div className="h-full flex flex-col items-center justify-center bg-slate-900/50 rounded-3xl border border-slate-800 border-dashed p-12 text-center">
@@ -305,7 +317,7 @@ export default function TeacherAssessmentsPage() {
                 </div>
             )}
 
-            {/* 🚨 EDIT CLASS MODAL */}
+            {/* 🚨 EDIT MULTIPLE CLASSES MODAL */}
             {isEditModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
                     <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-3xl shadow-2xl p-8 relative">
@@ -317,24 +329,28 @@ export default function TeacherAssessmentsPage() {
                         </button>
 
                         <h2 className="text-2xl font-extrabold text-white mb-2 flex items-center gap-2">
-                            <Edit className="text-emerald-400" /> Change Class
+                            <Edit className="text-emerald-400" /> Change Classes
                         </h2>
                         <p className="text-slate-400 text-sm mb-6">
-                            Move <strong>{assignmentToEdit?.title}</strong> to a different class.
+                            Select which classes should receive <strong>{assignmentToEdit?.title}</strong>.
                         </p>
 
-                        <div className="space-y-4 mb-8">
-                            <label className="block text-sm font-bold text-slate-400">Select a Class</label>
-                            <select
-                                value={newClassId}
-                                onChange={(e) => setNewClassId(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:border-emerald-500 outline-none appearance-none"
-                            >
-                                <option value="">Unassigned (Remove from class)</option>
-                                {classesList.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                            </select>
+                        <div className="space-y-3 mb-8 max-h-[300px] overflow-y-auto pr-2">
+                            {classesList.map(c => (
+                                <label
+                                    key={c.id}
+                                    className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${newSelectedClassIds.includes(c.id) ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400' : 'bg-slate-950 border-slate-700 hover:border-slate-500'}`}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={newSelectedClassIds.includes(c.id)}
+                                        onChange={() => toggleEditClass(c.id)}
+                                        className="w-4 h-4 accent-emerald-500"
+                                    />
+                                    <span className="font-bold text-sm">{c.name}</span>
+                                </label>
+                            ))}
+                            {classesList.length === 0 && <p className="text-slate-500 text-sm">No classes found.</p>}
                         </div>
 
                         <button
