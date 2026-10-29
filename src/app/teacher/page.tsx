@@ -1,18 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import pptxgen from "pptxgenjs";
 import {
     Sparkles, Presentation, MonitorPlay, LogOut,
     FileText, Loader2, ArrowLeft, Download, Edit3,
-    CheckCircle, Link as LinkIcon
+    CheckCircle, Link as LinkIcon, Send, Users, X
 } from "lucide-react";
 import DeckViewer from "@/components/DeckViewer";
+import { createClient } from "@/lib/supabase/client";
 
 export default function TeacherHub() {
     const router = useRouter();
+    const supabase = createClient();
 
     const [lessonText, setLessonText] = useState("");
     const [gradeLevel, setGradeLevel] = useState("KG1");
@@ -26,6 +28,22 @@ export default function TeacherHub() {
     const [isEditing, setIsEditing] = useState(false);
     const [activeSlideIndex, setActiveSlideIndex] = useState(0);
     const [isExporting, setIsExporting] = useState(false);
+
+    // 🚨 Publish States
+    const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+    const [targetType, setTargetType] = useState<'grade' | 'student'>('grade');
+    const [targetValue, setTargetValue] = useState("KG1");
+    const [studentsList, setStudentsList] = useState<{ id: string, full_name: string }[]>([]);
+    const [isPublishing, setIsPublishing] = useState(false);
+
+    // Fetch students for the dropdown
+    useEffect(() => {
+        async function fetchStudents() {
+            const { data } = await supabase.from('children').select('id, full_name').eq('is_approved', true);
+            if (data) setStudentsList(data);
+        }
+        fetchStudents();
+    }, [supabase]);
 
     async function handleGenerate(e: React.FormEvent) {
         e.preventDefault();
@@ -72,38 +90,55 @@ export default function TeacherHub() {
 
             deckData.slides.forEach((slide: any) => {
                 const pptSlide = pptx.addSlide();
-
-                pptSlide.addText(slide.heading || "Slide", {
-                    x: 0.5, y: 0.5, w: "90%", h: 1,
-                    fontSize: 36, bold: true, color: "363636"
-                });
-
+                pptSlide.addText(slide.heading || "Slide", { x: 0.5, y: 0.5, w: "90%", h: 1, fontSize: 36, bold: true, color: "363636" });
                 const bulletPoints = slide.bullets.map((b: string) => ({ text: b, options: { bullet: true } }));
-                pptSlide.addText(bulletPoints, {
-                    x: 0.5, y: 1.5, w: "90%", h: 2,
-                    fontSize: 24, color: "666666"
-                });
-
+                pptSlide.addText(bulletPoints, { x: 0.5, y: 1.5, w: "90%", h: 2, fontSize: 24, color: "666666" });
                 if (slide.teacherPrompt) {
-                    pptSlide.addText(`Teacher Prompt: ${slide.teacherPrompt}`, {
-                        x: 0.5, y: 4.5, w: "90%", h: 0.5,
-                        fontSize: 14, italic: true, color: "888888"
-                    });
+                    pptSlide.addText(`Teacher Prompt: ${slide.teacherPrompt}`, { x: 0.5, y: 4.5, w: "90%", h: 0.5, fontSize: 14, italic: true, color: "888888" });
                 }
             });
 
             await pptx.writeFile({ fileName: `${deckData.title || "Presentation"}.pptx` });
         } catch (err) {
-            console.error(err);
             alert("Failed to export PowerPoint file.");
         } finally {
             setIsExporting(false);
         }
     };
 
+    // 🚨 PUBLISH FUNCTION
+    const handlePublish = async () => {
+        setIsPublishing(true);
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) {
+            alert("You must be logged in.");
+            setIsPublishing(false);
+            return;
+        }
+
+        const { error } = await supabase.from('presentations').insert({
+            teacher_id: user.id,
+            title: deckData.title || "Untitled Lesson",
+            deck_data: deckData,
+            target_type: targetType,
+            target_value: targetType === 'grade' ? targetValue : targetValue // If student, targetValue is the ID
+        });
+
+        setIsPublishing(false);
+
+        if (error) {
+            alert("Failed to publish: " + error.message);
+        } else {
+            setIsPublishModalOpen(false);
+            alert("✅ Presentation published successfully!");
+        }
+    };
+
     return (
         <div className="flex h-screen bg-slate-950 text-slate-200 font-sans overflow-hidden">
 
+            {/* SIDEBAR */}
             <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between hidden md:flex">
                 <div>
                     <div className="p-6 flex items-center gap-3">
@@ -112,7 +147,6 @@ export default function TeacherHub() {
                         </div>
                         <span className="text-xl font-extrabold text-white tracking-tight">Teacher Hub</span>
                     </div>
-
                     <nav className="px-4 space-y-2 mt-4">
                         <Link href="/teacher" className="flex items-center gap-3 bg-emerald-500/10 text-emerald-400 font-bold px-4 py-3 rounded-xl border border-emerald-500/20">
                             <MonitorPlay size={20} /> AI Presentations
@@ -129,8 +163,8 @@ export default function TeacherHub() {
                 </div>
             </aside>
 
+            {/* MIDDLE COLUMN - EDITOR */}
             <main className="w-full md:w-[450px] bg-slate-900/50 border-r border-slate-800 flex flex-col overflow-y-auto relative z-10">
-
                 {isEditing && deckData ? (
                     <div className="p-8 pb-24">
                         <div className="flex justify-between items-center mb-6">
@@ -138,17 +172,13 @@ export default function TeacherHub() {
                                 <Edit3 className="text-emerald-400" /> Slide Editor
                             </h1>
                             <button onClick={() => setIsEditing(false)} className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg transition-all">
-                                <CheckCircle size={16} /> Save & Preview
+                                <CheckCircle size={16} /> Save
                             </button>
                         </div>
 
                         <div className="flex gap-2 overflow-x-auto pb-4 mb-4 scrollbar-hide">
                             {deckData.slides.map((_: any, i: number) => (
-                                <button
-                                    key={i}
-                                    onClick={() => setActiveSlideIndex(i)}
-                                    className={`shrink-0 w-12 h-12 rounded-xl font-bold flex items-center justify-center transition-all ${activeSlideIndex === i ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/30' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-                                >
+                                <button key={i} onClick={() => setActiveSlideIndex(i)} className={`shrink-0 w-12 h-12 rounded-xl font-bold flex items-center justify-center transition-all ${activeSlideIndex === i ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/30' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
                                     {i + 1}
                                 </button>
                             ))}
@@ -157,142 +187,127 @@ export default function TeacherHub() {
                         <div className="space-y-5 bg-slate-950 p-5 rounded-2xl border border-slate-800">
                             <div>
                                 <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Slide Heading</label>
-                                <input
-                                    type="text"
-                                    value={deckData.slides[activeSlideIndex].heading}
-                                    onChange={(e) => updateSlide(activeSlideIndex, 'heading', e.target.value)}
-                                    className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 focus:border-emerald-500 transition-all font-bold"
-                                />
+                                <input type="text" value={deckData.slides[activeSlideIndex].heading} onChange={(e) => updateSlide(activeSlideIndex, 'heading', e.target.value)} className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 focus:border-emerald-500 font-bold" />
                             </div>
-
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Bullet Points (One per line)</label>
-                                <textarea
-                                    value={deckData.slides[activeSlideIndex].bullets.join('\n')}
-                                    onChange={(e) => updateSlide(activeSlideIndex, 'bullets', e.target.value.split('\n'))}
-                                    className="w-full h-32 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 focus:border-emerald-500 transition-all text-sm resize-none"
-                                />
+                                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Bullet Points</label>
+                                <textarea value={deckData.slides[activeSlideIndex].bullets.join('\n')} onChange={(e) => updateSlide(activeSlideIndex, 'bullets', e.target.value.split('\n'))} className="w-full h-32 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 focus:border-emerald-500 text-sm resize-none" />
                             </div>
-
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide flex items-center gap-2">
-                                    <LinkIcon size={14} className="text-blue-400" /> Custom Image URL (Optional)
-                                </label>
-                                <input
-                                    type="text"
-                                    value={deckData.slides[activeSlideIndex].customImageUrl || ""}
-                                    onChange={(e) => updateSlide(activeSlideIndex, 'customImageUrl', e.target.value)}
-                                    className="w-full bg-slate-900 border border-blue-500/30 text-blue-100 rounded-xl px-4 py-3 focus:border-blue-500 transition-all text-sm"
-                                    placeholder="Paste a link from Google Images..."
-                                />
-                                {/* 🚨 Removed the '->' arrows to fix the syntax error */}
-                                <p className="text-[10px] text-slate-500 mt-1">Go to Google Images, Right Click the image, Copy Image Address, and Paste here.</p>
+                                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide flex items-center gap-2"><LinkIcon size={14} className="text-blue-400" /> Custom Image URL</label>
+                                <input type="text" value={deckData.slides[activeSlideIndex].customImageUrl || ""} onChange={(e) => updateSlide(activeSlideIndex, 'customImageUrl', e.target.value)} className="w-full bg-slate-900 border border-blue-500/30 text-blue-100 rounded-xl px-4 py-3 focus:border-blue-500 text-sm" placeholder="Paste image link here..." />
                             </div>
-
                             <div>
                                 <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Teacher Prompt</label>
-                                <textarea
-                                    value={deckData.slides[activeSlideIndex].teacherPrompt || ""}
-                                    onChange={(e) => updateSlide(activeSlideIndex, 'teacherPrompt', e.target.value)}
-                                    className="w-full h-20 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 focus:border-emerald-500 transition-all text-sm resize-none"
-                                />
+                                <textarea value={deckData.slides[activeSlideIndex].teacherPrompt || ""} onChange={(e) => updateSlide(activeSlideIndex, 'teacherPrompt', e.target.value)} className="w-full h-20 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 focus:border-emerald-500 text-sm resize-none" />
                             </div>
                         </div>
 
-                        <button
-                            onClick={handleExportPPTX}
-                            disabled={isExporting}
-                            className="w-full mt-8 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-extrabold py-4 rounded-xl shadow-lg shadow-blue-500/25 transition-all flex items-center justify-center gap-2"
-                        >
-                            {isExporting ? <Loader2 className="animate-spin" /> : <Download />}
-                            {isExporting ? "Exporting..." : "Download PowerPoint (.pptx)"}
-                        </button>
+                        <div className="grid grid-cols-2 gap-4 mt-8">
+                            <button onClick={handleExportPPTX} disabled={isExporting} className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
+                                {isExporting ? <Loader2 className="animate-spin" /> : <Download size={18} />} PPTX
+                            </button>
+                            <button onClick={() => setIsPublishModalOpen(true)} className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold py-4 rounded-xl shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-2">
+                                <Send size={18} /> Publish
+                            </button>
+                        </div>
                     </div>
                 ) : (
+                    // CREATOR FORM
                     <div className="p-8">
-                        <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white mb-6 transition-colors">
-                            <ArrowLeft size={16} /> Back to Dashboard
+                        <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white mb-6">
+                            <ArrowLeft size={16} /> Back
                         </Link>
-
-                        <h1 className="text-3xl font-extrabold text-white mb-2 flex items-center gap-2">
-                            <Sparkles className="text-emerald-400 w-8 h-8" /> AI Designer
-                        </h1>
-                        <p className="text-slate-400 text-sm mb-8">Generate 8 slides with real web images.</p>
+                        <h1 className="text-3xl font-extrabold text-white mb-2 flex items-center gap-2"><Sparkles className="text-emerald-400 w-8 h-8" /> AI Designer</h1>
+                        <p className="text-slate-400 text-sm mb-8">Generate slides and publish them to students.</p>
 
                         {error && <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-xl mb-6 text-sm text-center">{error}</div>}
 
                         <form onSubmit={handleGenerate} className="space-y-5">
                             <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Grade Level</label>
-                                    <select value={gradeLevel} onChange={e => setGradeLevel(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-all cursor-pointer">
-                                        <option value="Pre-K">Pre-K</option>
-                                        <option value="KG1">KG1</option>
-                                        <option value="KG2">KG2</option>
-                                        <option value="Grade 1">Grade 1</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Curriculum</label>
-                                    <select value={curriculum} onChange={e => setCurriculum(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-all cursor-pointer">
-                                        <option value="General">General</option>
-                                        <option value="Montessori">Montessori</option>
-                                    </select>
-                                </div>
+                                <select value={gradeLevel} onChange={e => setGradeLevel(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3">
+                                    <option value="Pre-K">Pre-K</option>
+                                    <option value="KG1">KG1</option>
+                                    <option value="KG2">KG2</option>
+                                </select>
+                                <select value={curriculum} onChange={e => setCurriculum(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3">
+                                    <option value="General">General</option>
+                                    <option value="Montessori">Montessori</option>
+                                </select>
                             </div>
-
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Lesson Content</label>
-                                <textarea
-                                    placeholder="Paste your lesson notes here..."
-                                    value={lessonText}
-                                    onChange={e => setLessonText(e.target.value)}
-                                    required
-                                    className="w-full h-48 bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-all resize-none text-sm leading-relaxed"
-                                />
-                            </div>
-
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-extrabold text-lg py-4 rounded-xl shadow-lg shadow-emerald-500/25 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-                            >
-                                {loading ? (
-                                    <><Loader2 className="animate-spin w-5 h-5" /> Generating 8 Slides...</>
-                                ) : (
-                                    <><Sparkles className="w-5 h-5" /> Generate Presentation</>
-                                )}
+                            <textarea placeholder="Paste your lesson notes here..." value={lessonText} onChange={e => setLessonText(e.target.value)} required className="w-full h-48 bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 resize-none text-sm" />
+                            <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-extrabold text-lg py-4 rounded-xl shadow-lg flex items-center justify-center gap-2">
+                                {loading ? <><Loader2 className="animate-spin w-5 h-5" /> Generating...</> : <><Sparkles className="w-5 h-5" /> Generate Presentation</>}
                             </button>
                         </form>
                     </div>
                 )}
             </main>
 
+            {/* PREVIEW AREA */}
             <section className="flex-1 relative bg-slate-950 hidden lg:flex items-center justify-center p-8">
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center text-emerald-500 animate-pulse">
-                        <MonitorPlay size={64} className="mb-4 opacity-50" />
-                        <p className="text-xl font-bold">AI is designing your 8 slides...</p>
-                    </div>
+                    <div className="text-emerald-500 animate-pulse font-bold text-xl">AI is designing...</div>
                 ) : deckData ? (
-                    <div className="w-full h-full max-w-6xl rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-slate-800 flex flex-col relative bg-slate-900">
-                        <button
-                            onClick={() => setIsEditing(!isEditing)}
-                            className="absolute top-6 right-6 z-50 bg-indigo-600/90 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl border border-indigo-400/30 shadow-xl shadow-indigo-500/20 font-bold text-sm flex items-center gap-2 transition-all backdrop-blur-md"
-                        >
-                            <Edit3 size={16} /> {isEditing ? "Close Editor" : "Edit Slides & Add Images"}
+                    <div className="w-full h-full max-w-6xl rounded-3xl overflow-hidden shadow-2xl border border-slate-800 relative bg-slate-900">
+                        <button onClick={() => setIsEditing(!isEditing)} className="absolute top-6 right-6 z-50 bg-indigo-600/90 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2">
+                            <Edit3 size={16} /> {isEditing ? "Close Editor" : "Edit Slides"}
                         </button>
-
                         <DeckViewer deck={deckData} />
                     </div>
                 ) : (
                     <div className="text-center text-slate-600">
                         <MonitorPlay size={80} className="mx-auto mb-6 opacity-20" />
-                        <h2 className="text-2xl font-bold text-slate-500">Presentation Preview</h2>
-                        <p className="text-slate-600 mt-2 max-w-sm mx-auto">Generate a presentation, then you can paste image URLs from Google to customize it perfectly.</p>
+                        <h2 className="text-2xl font-bold text-slate-500">Preview</h2>
                     </div>
                 )}
             </section>
+
+            {/* 🚨 PUBLISH MODAL */}
+            {isPublishModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+                    <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-3xl shadow-2xl p-8 relative">
+                        <button onClick={() => setIsPublishModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X size={24} /></button>
+                        <h2 className="text-2xl font-extrabold text-white mb-6 flex items-center gap-2"><Send className="text-emerald-400" /> Publish Lesson</h2>
+
+                        <div className="space-y-4 mb-8">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-400 mb-2">Send To:</label>
+                                <select value={targetType} onChange={(e: any) => setTargetType(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3">
+                                    <option value="grade">A Specific Grade</option>
+                                    <option value="student">One Specific Student</option>
+                                </select>
+                            </div>
+
+                            {targetType === 'grade' ? (
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-400 mb-2">Select Grade:</label>
+                                    <select value={targetValue} onChange={(e) => setTargetValue(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3">
+                                        <option value="Pre-K">Pre-K</option>
+                                        <option value="KG1">KG1</option>
+                                        <option value="KG2">KG2</option>
+                                    </select>
+                                </div>
+                            ) : (
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-400 mb-2">Select Student:</label>
+                                    <select value={targetValue} onChange={(e) => setTargetValue(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3">
+                                        <option value="">Choose a student...</option>
+                                        {studentsList.map(s => (
+                                            <option key={s.id} value={s.id}>{s.full_name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+
+                        <button onClick={handlePublish} disabled={isPublishing || (targetType === 'student' && !targetValue)} className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 disabled:opacity-50">
+                            {isPublishing ? <Loader2 className="animate-spin" /> : <Users size={20} />}
+                            {isPublishing ? "Publishing..." : "Send to Students"}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
