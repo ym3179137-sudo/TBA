@@ -1,448 +1,317 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import {
-    Blocks, Sparkles, LogOut, FileText, Paintbrush, Eye, Gamepad2,
-    ClipboardList, MonitorPlay, Plus, Save, Trash2, Type, List, Users, UploadCloud
-} from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import pptxgen from "pptxgenjs"; // 🚨 Import PPTXGenJS
+import {
+    Sparkles, Presentation, MonitorPlay, LogOut, UploadCloud,
+    Users, Video, FileText, Settings, Loader2, ArrowLeft,
+    Download, Edit3, Save, CheckCircle
+} from "lucide-react";
 import DeckViewer from "@/components/DeckViewer";
-import TBAArena from "@/components/TBAArena";
 
-export default function TeacherDashboard() {
-    const [activeTab, setActiveTab] = useState("presentations");
-
-    // Presentation State
-    const [lessonText, setLessonText] = useState("");
-    const [designPrompt, setDesignPrompt] = useState("");
-    const [generatedDeck, setGeneratedDeck] = useState<any>(null);
-    const [loading, setLoading] = useState(false);
-
-    // Assessment State
-    const [isCreatingForm, setIsCreatingForm] = useState(false);
-    const [formTitle, setFormTitle] = useState("");
-    const [formQuestions, setFormQuestions] = useState<any[]>([]);
-
-    // Game State
-    const [gameTopic, setGameTopic] = useState("");
-    const [activeGame, setActiveGame] = useState<any>(null);
-    const [generatingGame, setGeneratingGame] = useState(false);
-    const [hostedPin, setHostedPin] = useState<string | null>(null);
-
-    // Live Monitor State
-    const [students, setStudents] = useState<any[]>([]);
-
+export default function TeacherHub() {
     const router = useRouter();
-    const supabase = createClient();
 
-    // 1. Fetch latest students for Live Monitor
-    const fetchStudents = useCallback(async () => {
-        const { data } = await supabase.from("children").select("*").eq("is_approved", true);
-        if (data) setStudents(data);
-    }, [supabase]);
+    // Form States
+    const [lessonText, setLessonText] = useState("");
+    const [gradeLevel, setGradeLevel] = useState("KG1");
+    const [curriculum, setCurriculum] = useState("General");
+    const [style, setStyle] = useState("3D Pixar");
 
-    // 2. 5-Second Auto-Refresh for Live Monitor
-    useEffect(() => {
-        fetchStudents();
-        const interval = setInterval(fetchStudents, 5000); // ⏱️ 5-second refresh
-        return () => clearInterval(interval);
-    }, [fetchStudents]);
+    // App States
+    const [loading, setLoading] = useState(false);
+    const [deckData, setDeckData] = useState<any>(null);
+    const [error, setError] = useState<string | null>(null);
 
-    // 3. 🚨 TRACKING: Log when teacher leaves the screen
-    useEffect(() => {
-        const handleVisibilityChange = async () => {
-            if (document.hidden) {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    await supabase.from("audit_logs").insert({
-                        user_id: user.id,
-                        action: "TEACHER_LEFT_APP",
-                        details: { page: activeTab, message: "Teacher switched tabs or minimized the window." }
-                    });
-                }
-            }
-        };
-        document.addEventListener("visibilitychange", handleVisibilityChange);
-        return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-    }, [activeTab, supabase]);
+    // 🚨 Edit & Export States
+    const [isEditing, setIsEditing] = useState(false);
+    const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+    const [isExporting, setIsExporting] = useState(false);
 
-    async function handleGeneratePresentation(e: React.FormEvent) {
+    async function handleGenerate(e: React.FormEvent) {
         e.preventDefault();
+        if (!lessonText) return setError("Please enter some lesson content.");
+
         setLoading(true);
-        setGeneratedDeck(null);
+        setError(null);
+        setDeckData(null);
+        setIsEditing(false);
+
         try {
-            const res = await fetch("/api/generate-html", {
+            const res = await fetch("/api/ai/generate-presentation", {
                 method: "POST",
-                body: JSON.stringify({ lessonText, designPrompt }),
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ lessonText, gradeLevel, curriculum, style }),
             });
+
+            if (!res.ok) throw new Error("Failed to generate presentation");
             const data = await res.json();
-            setGeneratedDeck(data.deck);
-        } catch (err) {
-            alert("Failed to generate.");
+            setDeckData(data.deck);
+            setActiveSlideIndex(0);
+        } catch (err: any) {
+            setError(err.message || "Something went wrong.");
         } finally {
             setLoading(false);
         }
     }
 
-    async function handleGenerateGame(e: React.FormEvent) {
-        e.preventDefault();
-        setGeneratingGame(true);
-        try {
-            const res = await fetch("/api/game/generate", {
-                method: "POST",
-                body: JSON.stringify({ topic: gameTopic }),
-            });
-            const data = await res.json();
-            if (data.gameData) {
-                setActiveGame(data.gameData);
-            }
-        } catch (err) {
-            alert("Failed to generate game.");
-        } finally {
-            setGeneratingGame(false);
-        }
-    }
-
-    async function hostGame() {
-        if (!activeGame) return;
-        const pin = Math.floor(100000 + Math.random() * 900000).toString();
-        const { data: { user } } = await supabase.auth.getUser();
-
-        const { data: gameData, error: gameError } = await supabase.from("games").insert({
-            teacher_id: user?.id,
-            title: activeGame.title,
-            game_type: "arena",
-            content: activeGame
-        }).select().single();
-
-        if (gameError) return alert("Database Error (Games): " + gameError.message);
-
-        if (gameData) {
-            const { error: sessionError } = await supabase.from("game_sessions").insert({
-                game_id: gameData.id,
-                teacher_id: user?.id,
-                pin: pin,
-                status: 'lobby'
-            });
-
-            if (sessionError) return alert("Database Error (Sessions): " + sessionError.message);
-            setHostedPin(pin);
-        }
-    }
-
-    async function startLiveGame() {
-        if (!hostedPin) return;
-        await supabase.from("game_sessions").update({ status: 'playing' }).eq("pin", hostedPin);
-        alert("Game Started! Students are now entering the Arena.");
-    }
-
-    async function saveAssessment() {
-        if (!formTitle) return alert("Please add a title");
-        const { data: { user } } = await supabase.auth.getUser();
-
-        await supabase.from("assessments").insert({
-            teacher_id: user?.id,
-            title: formTitle,
-            questions: formQuestions
+    // 🚨 UPDATE SLIDE DATA FUNCTION
+    const updateSlide = (index: number, field: string, value: any) => {
+        setDeckData((prev: any) => {
+            const newDeck = { ...prev };
+            newDeck.slides[index][field] = value;
+            return newDeck;
         });
+    };
 
-        alert("Assessment saved successfully!");
-        setIsCreatingForm(false);
-        setFormTitle("");
-        setFormQuestions([]);
-    }
+    // 🚨 EXPORT TO PPTX FUNCTION
+    const handleExportPPTX = async () => {
+        if (!deckData) return;
+        setIsExporting(true);
 
-    async function handleSignOut() {
-        await supabase.auth.signOut();
-        router.push("/sign-in");
-    }
+        try {
+            const pptx = new pptxgen();
+            pptx.layout = "LAYOUT_16x9";
 
-    const addQuestion = (type: "multiple_choice" | "text_input") => {
-        setFormQuestions([...formQuestions, { type, text: "", options: ["", "", "", ""], correctIndex: 0 }]);
+            deckData.slides.forEach((slide: any) => {
+                const pptSlide = pptx.addSlide();
+
+                // Add Heading
+                pptSlide.addText(slide.heading || "Slide", {
+                    x: 0.5, y: 0.5, w: "90%", h: 1,
+                    fontSize: 32, bold: true, color: "363636"
+                });
+
+                // Add Bullets
+                const bulletPoints = slide.bullets.map((b: string) => ({ text: b, options: { bullet: true } }));
+                pptSlide.addText(bulletPoints, {
+                    x: 0.5, y: 1.5, w: "90%", h: 2,
+                    fontSize: 24, color: "666666"
+                });
+
+                // Add Teacher Prompt (styled like a note)
+                if (slide.teacherPrompt) {
+                    pptSlide.addText(`Teacher Prompt: ${slide.teacherPrompt}`, {
+                        x: 0.5, y: 4.5, w: "90%", h: 0.5,
+                        fontSize: 14, italic: true, color: "888888"
+                    });
+                }
+            });
+
+            await pptx.writeFile({ fileName: `${deckData.title || "Presentation"}.pptx` });
+        } catch (err) {
+            console.error("Failed to export PPTX", err);
+            alert("Failed to export PowerPoint file.");
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     return (
-        <main className="min-h-screen bg-slate-50 text-slate-900 flex">
-            {/* 🧭 SIDEBAR */}
-            <aside className="w-64 bg-slate-900 text-white flex flex-col min-h-screen shrink-0">
-                <div className="p-6 flex items-center gap-3 border-b border-slate-800">
-                    <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center">
-                        <Blocks className="w-5 h-5 text-white" />
+        <div className="flex h-screen bg-slate-950 text-slate-200 font-sans overflow-hidden">
+
+            {/* LEFT SIDEBAR */}
+            <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between hidden md:flex">
+                <div>
+                    <div className="p-6 flex items-center gap-3">
+                        <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                            <Presentation className="text-white w-6 h-6" />
+                        </div>
+                        <span className="text-xl font-extrabold text-white tracking-tight">Teacher Hub</span>
                     </div>
-                    <span className="font-bold text-lg">Teacher Hub</span>
+
+                    <nav className="px-4 space-y-2 mt-4">
+                        <Link href="/teacher" className="flex items-center gap-3 bg-emerald-500/10 text-emerald-400 font-bold px-4 py-3 rounded-xl border border-emerald-500/20">
+                            <MonitorPlay size={20} /> AI Presentations
+                        </Link>
+                        <Link href="/teacher/assessments" className="flex items-center gap-3 text-slate-400 hover:text-white hover:bg-slate-800 font-medium px-4 py-3 rounded-xl transition-all">
+                            <FileText size={20} /> Assessments
+                        </Link>
+                        <Link href="/teacher/arena" className="flex items-center gap-3 text-slate-400 hover:text-white hover:bg-slate-800 font-medium px-4 py-3 rounded-xl transition-all">
+                            <Video size={20} /> TBA Arena
+                        </Link>
+                    </nav>
                 </div>
-
-                <nav className="flex-1 p-4 space-y-2">
-                    <button onClick={() => setActiveTab("presentations")} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'presentations' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-                        <MonitorPlay className="w-5 h-5" /> AI Presentations
-                    </button>
-                    <button onClick={() => setActiveTab("assessments")} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'assessments' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-                        <ClipboardList className="w-5 h-5" /> Assessments
-                    </button>
-                    <button onClick={() => setActiveTab("games")} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'games' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-                        <Gamepad2 className="w-5 h-5" /> TBA Arena
-                    </button>
-                    <button onClick={() => setActiveTab("uploads")} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'uploads' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-                        <UploadCloud className="w-5 h-5" /> Uploads
-                    </button>
-                    <button onClick={() => setActiveTab("live")} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'live' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-                        <Eye className="w-5 h-5" /> Live Monitor
-                    </button>
-                </nav>
-
                 <div className="p-4 border-t border-slate-800">
-                    <button onClick={handleSignOut} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-slate-800 hover:text-red-300 transition-colors">
-                        <LogOut className="w-5 h-5" /> Sign Out
+                    <button onClick={() => router.push('/sign-in')} className="flex items-center gap-3 text-red-400 hover:text-red-300 hover:bg-red-500/10 font-bold px-4 py-3 rounded-xl transition-all w-full">
+                        <LogOut size={20} /> Sign Out
                     </button>
                 </div>
             </aside>
 
-            {/* 🖥️ MAIN CONTENT AREA */}
-            <div className="flex-1 flex flex-col h-screen overflow-hidden">
+            {/* MIDDLE COLUMN - CREATOR / EDITOR */}
+            <main className="w-full md:w-[450px] bg-slate-900/50 border-r border-slate-800 flex flex-col overflow-y-auto relative z-10">
 
-                {/* PRESENTATIONS TAB */}
-                {activeTab === "presentations" && (
-                    <div className="flex flex-1 overflow-hidden">
-                        <div className="w-1/3 p-6 border-r bg-white overflow-y-auto">
-                            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-                                <Sparkles className="text-emerald-500" /> AI Designer
-                            </h2>
-                            <form onSubmit={handleGeneratePresentation} className="space-y-4">
-                                <div>
-                                    <label className="flex items-center gap-2 text-sm font-medium mb-2"><FileText className="w-4 h-4" /> Lesson Content</label>
-                                    <textarea value={lessonText} onChange={(e) => setLessonText(e.target.value)} placeholder="Paste your lesson notes here..." className="w-full border rounded-xl px-3 py-2 bg-slate-50 min-h-[200px]" required />
-                                </div>
-                                <div>
-                                    <label className="flex items-center gap-2 text-sm font-medium mb-2"><Paintbrush className="w-4 h-4" /> Design Instructions</label>
-                                    <textarea value={designPrompt} onChange={(e) => setDesignPrompt(e.target.value)} placeholder="e.g., Floating balloons, pastel colors..." className="w-full border rounded-xl px-3 py-2 bg-slate-50 min-h-[100px]" />
-                                </div>
-                                <button type="submit" disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl flex justify-center gap-2">
-                                    {loading ? "Generating..." : "Generate Presentation"} <Eye className="w-5 h-5" />
-                                </button>
-                            </form>
+                {isEditing && deckData ? (
+                    // 🚨 EDIT MODE UI
+                    <div className="p-8 pb-24">
+                        <div className="flex justify-between items-center mb-6">
+                            <h1 className="text-2xl font-extrabold text-white flex items-center gap-2">
+                                <Edit3 className="text-emerald-400" /> Edit Slides
+                            </h1>
+                            <button onClick={() => setIsEditing(false)} className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1">
+                                <CheckCircle size={16} /> Done
+                            </button>
                         </div>
-                        <div className="flex-1 bg-slate-100 relative">
-                            {generatedDeck ? <DeckViewer deck={generatedDeck} /> : (
-                                <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
-                                    <MonitorPlay className="w-16 h-16 mb-4 opacity-50" />
-                                    <p>Your presentation preview will appear here.</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
 
-                {/* ASSESSMENTS TAB */}
-                {activeTab === "assessments" && (
-                    <div className="p-8 overflow-y-auto">
-                        {!isCreatingForm ? (
-                            <>
-                                <div className="flex justify-between items-center mb-8">
-                                    <div>
-                                        <h2 className="text-2xl font-bold">My Assessments</h2>
-                                        <p className="text-slate-500">Create and manage quizzes for your students.</p>
-                                    </div>
-                                    <button onClick={() => setIsCreatingForm(true)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2">
-                                        <Plus className="w-5 h-5" /> Create Form
-                                    </button>
-                                </div>
-                                <div className="bg-white p-8 rounded-2xl border shadow-sm text-center text-slate-500">
-                                    No assessments created yet. Click "Create Form" to start.
-                                </div>
-                            </>
-                        ) : (
-                            <div className="max-w-3xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h2 className="text-2xl font-bold">New Assessment</h2>
-                                    <button onClick={() => setIsCreatingForm(false)} className="text-slate-500 hover:text-slate-800 font-medium">Cancel</button>
-                                </div>
-
-                                <input placeholder="Form Title (e.g., Math Quiz 1)" value={formTitle} onChange={e => setFormTitle(e.target.value)} className="text-3xl font-bold border-b-2 w-full mb-8 outline-none p-2 bg-slate-50 rounded-t-lg" />
-
-                                {formQuestions.map((q, i) => (
-                                    <div key={i} className="p-6 border border-slate-200 rounded-xl mb-6 bg-slate-50 relative shadow-sm">
-                                        <button onClick={() => setFormQuestions(formQuestions.filter((_, idx) => idx !== i))} className="absolute top-4 right-4 text-red-500 hover:text-red-700">
-                                            <Trash2 className="w-5 h-5" />
-                                        </button>
-
-                                        <div className="flex items-center gap-2 mb-3 text-sm font-bold text-slate-500 uppercase tracking-wider">
-                                            {q.type === "multiple_choice" ? <><List className="w-4 h-4" /> Multiple Choice</> : <><Type className="w-4 h-4" /> Text Input</>}
-                                        </div>
-
-                                        <input placeholder="Question prompt" value={q.text} onChange={e => { const n = [...formQuestions]; n[i].text = e.target.value; setFormQuestions(n); }} className="w-full p-3 border rounded-lg mb-4 font-medium bg-white" />
-
-                                        {q.type === "multiple_choice" && (
-                                            <div className="space-y-2">
-                                                {q.options.map((opt: string, optIdx: number) => (
-                                                    <div key={optIdx} className="flex gap-3 items-center">
-                                                        <input type="radio" name={`correct-${i}`} checked={q.correctIndex === optIdx} onChange={() => { const n = [...formQuestions]; n[i].correctIndex = optIdx; setFormQuestions(n); }} className="w-5 h-5 text-emerald-600" />
-                                                        <input placeholder={`Option ${optIdx + 1}`} value={opt} onChange={e => { const n = [...formQuestions]; n[i].options[optIdx] = e.target.value; setFormQuestions(n); }} className="flex-1 p-2 border-b bg-transparent focus:border-emerald-500 outline-none" />
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-
-                                        {q.type === "text_input" && (
-                                            <div className="p-4 bg-slate-100 border border-slate-300 rounded-lg text-slate-400 italic">
-                                                Students will type their answer here...
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-
-                                <div className="grid grid-cols-2 gap-4 mb-8">
-                                    <button onClick={() => addQuestion("multiple_choice")} className="py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-600 font-bold hover:bg-slate-50 hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center gap-2">
-                                        <Plus className="w-5 h-5" /> Multiple Choice
-                                    </button>
-                                    <button onClick={() => addQuestion("text_input")} className="py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-600 font-bold hover:bg-slate-50 hover:border-amber-500 hover:text-amber-600 transition-colors flex items-center justify-center gap-2">
-                                        <Plus className="w-5 h-5" /> Text Input
-                                    </button>
-                                </div>
-
-                                <button onClick={saveAssessment} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl flex justify-center gap-2 text-lg shadow-md">
-                                    <Save className="w-5 h-5" /> Save Assessment
+                        {/* Slide Selector Tabs */}
+                        <div className="flex gap-2 overflow-x-auto pb-4 mb-4 scrollbar-hide">
+                            {deckData.slides.map((_: any, i: number) => (
+                                <button
+                                    key={i}
+                                    onClick={() => setActiveSlideIndex(i)}
+                                    className={`shrink-0 w-10 h-10 rounded-xl font-bold flex items-center justify-center transition-all ${activeSlideIndex === i ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                                >
+                                    {i + 1}
                                 </button>
+                            ))}
+                        </div>
+
+                        {/* Editing Form for Active Slide */}
+                        <div className="space-y-5 bg-slate-950 p-5 rounded-2xl border border-slate-800">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Slide Heading</label>
+                                <input
+                                    type="text"
+                                    value={deckData.slides[activeSlideIndex].heading}
+                                    onChange={(e) => updateSlide(activeSlideIndex, 'heading', e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2 focus:border-emerald-500 transition-all font-bold"
+                                />
                             </div>
-                        )}
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Bullet Points (One per line)</label>
+                                <textarea
+                                    value={deckData.slides[activeSlideIndex].bullets.join('\n')}
+                                    onChange={(e) => updateSlide(activeSlideIndex, 'bullets', e.target.value.split('\n'))}
+                                    className="w-full h-32 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2 focus:border-emerald-500 transition-all text-sm resize-none"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Teacher Prompt (Action/Question)</label>
+                                <textarea
+                                    value={deckData.slides[activeSlideIndex].teacherPrompt || ""}
+                                    onChange={(e) => updateSlide(activeSlideIndex, 'teacherPrompt', e.target.value)}
+                                    className="w-full h-20 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-2 focus:border-emerald-500 transition-all text-sm resize-none"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Export Button */}
+                        <button
+                            onClick={handleExportPPTX}
+                            disabled={isExporting}
+                            className="w-full mt-8 bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
+                        >
+                            {isExporting ? <Loader2 className="animate-spin" /> : <Download />}
+                            {isExporting ? "Exporting..." : "Download PowerPoint (.pptx)"}
+                        </button>
                     </div>
-                )}
+                ) : (
+                    // 🚨 CREATOR MODE UI
+                    <div className="p-8">
+                        <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white mb-6 transition-colors">
+                            <ArrowLeft size={16} /> Back to Dashboard
+                        </Link>
 
-                {/* GAMES TAB */}
-                {activeTab === "games" && (
-                    <div className="p-8 overflow-y-auto h-full">
-                        {!activeGame && (
-                            <div className="max-w-2xl mx-auto bg-white p-10 rounded-3xl shadow-lg border border-slate-200 text-center">
-                                <div className="w-20 h-20 bg-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                                    <Gamepad2 className="w-10 h-10 text-purple-600" />
-                                </div>
-                                <h2 className="text-3xl font-extrabold mb-3">TBA Arena</h2>
-                                <p className="text-slate-500 mb-8 text-lg">Generate a custom quiz for your students.</p>
-                                <form onSubmit={handleGenerateGame} className="flex flex-col sm:flex-row gap-4">
-                                    <input value={gameTopic} onChange={e => setGameTopic(e.target.value)} placeholder="e.g., Math Shapes, Colors, Animals" className="flex-1 border-2 border-slate-200 rounded-xl px-5 py-4 bg-slate-50 text-lg outline-none focus:border-purple-500" required />
-                                    <button type="submit" disabled={generatingGame} className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-8 py-4 rounded-xl text-lg shadow-md disabled:opacity-50 transition-colors">
-                                        {generatingGame ? "Building..." : "Generate Game"}
-                                    </button>
-                                </form>
-                            </div>
-                        )}
+                        <h1 className="text-3xl font-extrabold text-white mb-2 flex items-center gap-2">
+                            <Sparkles className="text-emerald-400 w-8 h-8" /> AI Designer
+                        </h1>
+                        <p className="text-slate-400 text-sm mb-8">Generate world-class presentations in seconds.</p>
 
-                        {activeGame && !hostedPin && (
-                            <div className="max-w-4xl mx-auto">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h2 className="text-2xl font-bold">Preview: {activeGame.title}</h2>
-                                    <button onClick={() => setActiveGame(null)} className="text-slate-500 font-medium">Discard</button>
-                                </div>
-                                <div className="h-[500px] rounded-3xl overflow-hidden shadow-2xl border-4 border-indigo-950 relative">
-                                    <TBAArena gameData={activeGame} onFinish={() => { }} isPreview={true} />
-                                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center z-50">
-                                        <h3 className="text-white text-4xl font-extrabold mb-8">Ready to play?</h3>
-                                        <button onClick={hostGame} className="bg-emerald-500 hover:bg-emerald-400 text-white font-extrabold text-3xl px-12 py-6 rounded-full shadow-[0_0_40px_rgba(16,185,129,0.5)] animate-pulse hover:animate-none transition-all hover:scale-105">
-                                            Host Live Game
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                        {error && <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-xl mb-6 text-sm text-center">{error}</div>}
 
-                        {activeGame && hostedPin && (
-                            <div className="max-w-3xl mx-auto bg-white p-12 rounded-3xl shadow-2xl border border-slate-200 text-center h-[80vh] flex flex-col justify-center">
-                                <h2 className="text-2xl font-bold text-slate-500 mb-2 uppercase tracking-widest">Join at localhost:3000/join</h2>
-                                <h1 className="text-8xl font-black text-indigo-600 tracking-widest mb-12 drop-shadow-sm">{hostedPin}</h1>
-
-                                <div className="bg-slate-50 rounded-2xl p-8 border border-slate-200 mb-12 flex-1 flex flex-col items-center justify-center">
-                                    <Users className="w-16 h-16 text-indigo-300 mb-4 animate-bounce" />
-                                    <h3 className="font-bold text-2xl text-slate-700 mb-2">Waiting for students...</h3>
-                                    <p className="text-slate-500">Students are entering the lobby and choosing their skins.</p>
-                                </div>
-
-                                <div className="flex gap-4">
-                                    <button onClick={() => { setHostedPin(null); setActiveGame(null); }} className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-4 rounded-xl text-lg transition-colors">
-                                        Cancel Game
-                                    </button>
-                                    <button onClick={startLiveGame} className="flex-[2] bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-4 rounded-xl text-xl shadow-lg transition-transform hover:scale-105">
-                                        Start Game Now
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* UPLOADS TAB */}
-                {activeTab === "uploads" && (
-                    <div className="p-8 max-w-2xl mx-auto w-full">
-                        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
-                            <h2 className="text-2xl font-bold mb-6">Upload Custom Content</h2>
-                            <p className="text-slate-500 mb-6">Upload your own PDFs, documents, or slides and publish them to a class.</p>
-
-                            <form className="space-y-4">
-                                <div className="border-2 border-dashed border-slate-300 rounded-2xl p-12 text-center hover:bg-slate-50 transition-colors cursor-pointer">
-                                    <UploadCloud className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-                                    <p className="font-bold text-slate-700">Click to upload or drag and drop</p>
-                                    <p className="text-sm text-slate-500 mt-1">PDF, DOCX, PPTX, or Images</p>
-                                    <input type="file" className="hidden" />
-                                </div>
-
+                        <form onSubmit={handleGenerate} className="space-y-5">
+                            <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium mb-2">Assign to Class</label>
-                                    <select className="w-full border rounded-xl px-4 py-3 bg-slate-50">
-                                        <option>KG1</option>
-                                        <option>KG2</option>
-                                        <option>Pre-K</option>
+                                    <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Grade Level</label>
+                                    <select value={gradeLevel} onChange={e => setGradeLevel(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-all cursor-pointer">
+                                        <option value="Pre-K">Pre-K</option>
+                                        <option value="KG1">KG1</option>
+                                        <option value="KG2">KG2</option>
+                                        <option value="Grade 1">Grade 1</option>
                                     </select>
                                 </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Curriculum</label>
+                                    <select value={curriculum} onChange={e => setCurriculum(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-all cursor-pointer">
+                                        <option value="General">General</option>
+                                        <option value="Montessori">Montessori</option>
+                                        <option value="British Curriculum">British</option>
+                                        <option value="American Curriculum">American</option>
+                                    </select>
+                                </div>
+                            </div>
 
-                                <button type="button" className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl mt-4">
-                                    Publish Document
-                                </button>
-                            </form>
-                        </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Visual Style</label>
+                                <select value={style} onChange={e => setStyle(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-all cursor-pointer">
+                                    <option value="3D Pixar">3D Pixar Animation</option>
+                                    <option value="Watercolor">Soft Watercolor</option>
+                                    <option value="Colorful Cartoon">Colorful Cartoon</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Lesson Content</label>
+                                <textarea
+                                    placeholder="Paste your lesson notes, vocabulary words, or a numbered list here..."
+                                    value={lessonText}
+                                    onChange={e => setLessonText(e.target.value)}
+                                    required
+                                    className="w-full h-40 bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-all resize-none text-sm leading-relaxed"
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-extrabold text-lg py-4 rounded-xl shadow-lg shadow-emerald-500/25 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                            >
+                                {loading ? (
+                                    <><Loader2 className="animate-spin w-5 h-5" /> Generating Magic...</>
+                                ) : (
+                                    <><Sparkles className="w-5 h-5" /> Generate Presentation</>
+                                )}
+                            </button>
+                        </form>
                     </div>
                 )}
+            </main>
 
-                {/* LIVE MONITOR TAB */}
-                {activeTab === "live" && (
-                    <div className="p-8 overflow-y-auto">
-                        <h2 className="text-2xl font-bold mb-2">Live Student Monitor</h2>
-                        <p className="text-slate-500 mb-8">Real-time view of approved students in your academy.</p>
+            {/* RIGHT COLUMN - PREVIEW */}
+            <section className="flex-1 relative bg-slate-950 hidden lg:flex items-center justify-center p-8">
+                <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '32px 32px' }}></div>
 
-                        <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
-                            <table className="w-full text-left">
-                                <thead className="bg-slate-50 border-b">
-                                    <tr>
-                                        <th className="p-4 font-medium text-slate-600">Student Name</th>
-                                        <th className="p-4 font-medium text-slate-600">Class</th>
-                                        <th className="p-4 font-medium text-slate-600">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {students.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={3} className="p-8 text-center text-slate-500">
-                                                No approved students found.
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        students.map(s => (
-                                            <tr key={s.id} className="border-b last:border-0 hover:bg-slate-50">
-                                                <td className="p-4 font-bold text-slate-800">{s.full_name}</td>
-                                                <td className="p-4 text-slate-600">{s.class_name}</td>
-                                                <td className="p-4">
-                                                    <span className="flex items-center gap-2 text-sm font-medium text-emerald-600">
-                                                        <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full inline-block animate-pulse"></span> Active
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center text-emerald-500 animate-pulse">
+                        <MonitorPlay size={64} className="mb-4 opacity-50" />
+                        <p className="text-xl font-bold">AI is designing your slides...</p>
+                    </div>
+                ) : deckData ? (
+                    <div className="w-full h-full max-w-5xl rounded-2xl overflow-hidden shadow-2xl border border-slate-800 flex flex-col relative">
+
+                        {/* Floating Edit Button on Preview */}
+                        <button
+                            onClick={() => setIsEditing(!isEditing)}
+                            className="absolute top-4 right-4 z-50 bg-slate-900/80 backdrop-blur-md hover:bg-slate-800 text-white px-4 py-2 rounded-xl border border-slate-700 shadow-xl font-bold text-sm flex items-center gap-2 transition-all"
+                        >
+                            <Edit3 size={16} /> {isEditing ? "Preview Mode" : "Edit Slides"}
+                        </button>
+
+                        <DeckViewer deck={deckData} />
+                    </div>
+                ) : (
+                    <div className="text-center text-slate-600">
+                        <MonitorPlay size={80} className="mx-auto mb-6 opacity-20" />
+                        <h2 className="text-2xl font-bold text-slate-500">Presentation Preview</h2>
+                        <p className="text-slate-600 mt-2 max-w-sm mx-auto">Fill out the lesson content and let the AI build a world-class presentation.</p>
                     </div>
                 )}
-
-            </div>
-        </main>
+            </section>
+        </div>
     );
 }
