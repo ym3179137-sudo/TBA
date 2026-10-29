@@ -5,53 +5,46 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Smile, Loader2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-
-// 🚨 IMPORT YOUR BACKGROUND IMAGE
 import studentBg from "@/pic/100a5ec1-5f72-4fa8-bf39-6a9868de1337.jpg";
 
 export default function StudentLogin() {
     const router = useRouter();
-    const supabase = createClient();
 
-    // Form states
     const [selectedStudentId, setSelectedStudentId] = useState("");
     const [pin, setPin] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
-    // Database states
     const [students, setStudents] = useState<{ id: string; full_name: string; class_name: string }[]>([]);
     const [fetchingStudents, setFetchingStudents] = useState(true);
 
-    // 🛡️ FETCH REAL STUDENTS FROM DATABASE SECURELY
+    // 🛡️ FETCH REAL STUDENTS VIA SECURE API ROUTE
     useEffect(() => {
         async function fetchStudents() {
-            // We ONLY fetch approved students. We only grab their ID and Name.
-            // We NEVER fetch their PINs to the frontend.
-            const { data, error } = await supabase
-                .from("children")
-                .select("id, full_name, class_name")
-                .eq("is_approved", true)
-                .order("full_name", { ascending: true });
+            try {
+                const res = await fetch("/api/get-students");
+                const data = await res.json();
 
-            if (data) setStudents(data);
-            setFetchingStudents(false);
+                if (data.students) {
+                    setStudents(data.students);
+                }
+            } catch (err) {
+                console.error("Failed to load students");
+            } finally {
+                setFetchingStudents(false);
+            }
         }
         fetchStudents();
-    }, [supabase]);
+    }, []);
 
     async function handleLogin(e: React.FormEvent) {
         e.preventDefault();
-        if (!selectedStudentId) {
-            setError("Please select your name.");
-            return;
-        }
+        if (!selectedStudentId) return setError("Please select your name.");
 
         setLoading(true);
         setError(null);
 
-        // Send the secure Student ID (not the name) to the server
+        // Send the secure Student ID to the server
         const res = await fetch("/api/student-login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -71,20 +64,12 @@ export default function StudentLogin() {
     return (
         <div className="min-h-screen relative flex flex-col items-center justify-center font-sans p-6 overflow-hidden">
 
-            {/* 🖼️ BACKGROUND IMAGE (No more dark overlay!) */}
-            <Image
-                src={studentBg}
-                alt="Student Background"
-                fill
-                className="object-cover z-0"
-                priority
-            />
+            <Image src={studentBg} alt="Student Background" fill className="object-cover z-0" priority />
 
             <Link href="/sign-in" className="absolute top-8 left-8 z-10 flex items-center gap-2 text-white hover:text-emerald-300 transition-colors font-bold bg-black/40 px-5 py-2.5 rounded-xl border border-white/20 backdrop-blur-md shadow-lg">
                 <ArrowLeft size={20} /> Back to Login
             </Link>
 
-            {/* 🛡️ The Glassmorphic Login Card */}
             <div className="w-full max-w-md bg-slate-950/85 backdrop-blur-xl border border-slate-700 p-8 rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] relative z-10">
                 <div className="flex justify-center mb-6">
                     <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center border-4 border-emerald-500/30">
@@ -100,7 +85,6 @@ export default function StudentLogin() {
                     <div>
                         <label className="block text-sm font-bold text-slate-300 mb-2 uppercase tracking-wide">Select Your Name</label>
 
-                        {/* 🛡️ DYNAMIC DROPDOWN */}
                         {fetchingStudents ? (
                             <div className="w-full bg-slate-900 border-2 border-slate-700 text-slate-400 rounded-2xl px-4 py-4 flex items-center justify-center gap-2">
                                 <Loader2 className="animate-spin w-5 h-5" /> Loading Students...
@@ -115,7 +99,7 @@ export default function StudentLogin() {
                                 <option value="" disabled hidden>Choose your name...</option>
                                 {students.map((student) => (
                                     <option key={student.id} value={student.id}>
-                                        {student.full_name} ({student.class_name})
+                                        {student.full_name} {student.class_name ? `(${student.class_name})` : ''}
                                     </option>
                                 ))}
                             </select>
