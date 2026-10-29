@@ -1,24 +1,40 @@
-import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Gamepad2, Box, BookOpen, Video } from "lucide-react";
-import SignOutButton from "../dashboard/sign-out-button"; // Adjust path if needed
+import { cookies } from "next/headers";
+import { Gamepad2, Box, BookOpen, Video, LogOut } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
 
-// 🚨 IMPORT THE BACKGROUND DIRECTLY
+// 🚨 IMPORT YOUR BACKGROUND IMAGE
 import studentBg from "@/pic/100a5ec1-5f72-4fa8-bf39-6a9868de1337.jpg";
 
 export default async function StudentDashboard() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const cookieStore = await cookies();
 
-    if (!user) redirect("/sign-in");
+    // 🛡️ READ THE STUDENT COOKIE SET BY THE LOGIN API
+    const studentId = cookieStore.get("student_id")?.value;
+    const studentName = cookieStore.get("student_name")?.value;
+
+    // If there is no student cookie, kick them back to the student login (NOT the teacher login)
+    if (!studentId) {
+        redirect("/student-login");
+    }
+
+    const supabase = await createClient();
+
+    // Fetch their specific data from the database using their ID
+    const { data: studentData } = await supabase
+        .from("children")
+        .select("coins, equipped_skin")
+        .eq("id", studentId)
+        .single();
+
+    const coins = studentData?.coins || 0;
 
     return (
-        // 🖼️ THE BACKGROUND IMAGE WRAPPER
         <div className="min-h-screen relative flex flex-col font-sans">
 
-            {/* The Background Image (Next.js optimized) */}
+            {/* 🖼️ THE BACKGROUND IMAGE WRAPPER */}
             <Image
                 src={studentBg}
                 alt="Student Background"
@@ -41,13 +57,33 @@ export default async function StudentDashboard() {
                         </div>
                         <span className="text-xl font-extrabold text-white tracking-tight">Student Portal</span>
                     </div>
-                    <SignOutButton />
+
+                    <div className="flex items-center gap-4">
+                        <div className="bg-amber-500/20 text-amber-300 font-bold px-4 py-2 rounded-xl border border-amber-500/30">
+                            {coins} 🪙 Coins
+                        </div>
+
+                        {/* Sign Out Button (Clears the cookie) */}
+                        <form action={async () => {
+                            "use server";
+                            const cookieStore = await cookies();
+                            cookieStore.delete("student_id");
+                            cookieStore.delete("student_name");
+                            redirect("/student-login");
+                        }}>
+                            <button type="submit" className="flex items-center gap-2 text-sm font-bold text-red-400 hover:text-red-300 bg-red-500/10 px-4 py-2 rounded-xl transition-colors border border-red-500/20">
+                                <LogOut size={16} /> Sign Out
+                            </button>
+                        </form>
+                    </div>
                 </nav>
 
                 {/* Dashboard Content */}
                 <main className="flex-1 max-w-6xl w-full mx-auto p-6 mt-8">
                     <div className="mb-10">
-                        <h1 className="text-4xl font-extrabold text-white mb-2 drop-shadow-lg">Welcome back!</h1>
+                        <h1 className="text-4xl font-extrabold text-white mb-2 drop-shadow-lg">
+                            Welcome back, {studentName}!
+                        </h1>
                         <p className="text-slate-300 text-lg">Ready for today's adventure?</p>
                     </div>
 
