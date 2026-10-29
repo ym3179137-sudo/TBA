@@ -79,7 +79,7 @@ export default function TeacherAssignmentsPage() {
         }
     };
 
-    // 🚨 THE CREATE FUNCTION (Now securely inside the component)
+    // 🚨 THE CREATE FUNCTION (Now using fetch)
     const handleCreate = async () => {
         if (!title.trim()) return setError("Please enter an assignment title.");
 
@@ -96,7 +96,7 @@ export default function TeacherAssignmentsPage() {
                 settingsPayload.docUrl = docUrl;
             }
 
-            // Call the new API route instead of the Server Action
+            // Call the API route instead of the Server Action
             const res = await fetch("/api/assignments/create", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
