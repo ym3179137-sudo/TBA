@@ -6,6 +6,7 @@ const nextConfig = {
     root: path.resolve(__dirname),
   },
   typescript: {
+    // 🚨 Ignores ALL TypeScript errors during build
     ignoreBuildErrors: true,
   },
 };
