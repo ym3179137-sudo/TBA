@@ -2,6 +2,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { Sparkles, Shield, Gamepad2, ArrowRight, Box } from "lucide-react";
 
+// 🚨 IMPORT THE LOGO DIRECTLY
+import logoImg from "@/pic/FAV-ICO2.png";
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col font-sans relative overflow-hidden text-slate-200">
@@ -13,14 +16,12 @@ export default function Home() {
       {/* Header */}
       <nav className="p-6 flex justify-between items-center max-w-7xl mx-auto w-full relative z-10">
         <div className="flex items-center gap-3">
-          {/* 🚨 Your New Logo */}
-          <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/30 overflow-hidden p-1 border border-slate-700">
+          <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/30 overflow-hidden p-1.5 border border-slate-700">
+            {/* 🚨 USE THE IMPORTED IMAGE */}
             <Image
-              src="/images/logo.png"
+              src={logoImg}
               alt="The Baby Academy Logo"
-              width={48}
-              height={48}
-              className="object-contain"
+              className="object-contain w-full h-full"
             />
           </div>
           <span className="text-2xl font-extrabold text-white tracking-tight">

@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Blocks, ArrowLeft } from "lucide-react";
-
+import logoImg from "@/pic/FAV-ICO2.png";
+import Image from "next/image";
 export default function SignUp() {
     const [fullName, setFullName] = useState("");
     const [email, setEmail] = useState("");
@@ -50,7 +51,7 @@ export default function SignUp() {
             <div className="w-full max-w-md bg-slate-900/80 backdrop-blur-xl border border-slate-800 p-8 rounded-3xl shadow-2xl relative z-10">
                 <div className="flex justify-center mb-6">
                     <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/30 p-1.5">
-                        <img src="/images/logo.png" alt="Logo" className="object-contain w-full h-full" />
+                        <Image src={logoImg} alt="Logo" className="object-contain w-full h-full" />
                     </div>
                 </div>
 
