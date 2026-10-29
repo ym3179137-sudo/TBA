@@ -1,79 +1,264 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import DeckViewer from "@/components/DeckViewer";
-import { ArrowLeft, StopCircle, Loader2 } from "lucide-react";
+import { StopCircle, Loader2, MousePointer2, PenTool, Trash2, Type, Users } from "lucide-react";
 
-export default function TeacherLivePresenter({ params }: { params: { id: string } }) {
+export default function TeacherLivePresenter() {
     const router = useRouter();
-    const supabase = createClient();
+    const params = useParams();
+    const presentationId = params?.id as string;
+    const supabase = useMemo(() => createClient(), []);
 
     const [presentation, setPresentation] = useState<any>(null);
     const [currentSlide, setCurrentSlide] = useState(0);
     const [sessionId, setSessionId] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
 
-    // Start live session on mount
+    // Tools & Drawing State
+    const [tool, setTool] = useState<'none' | 'laser' | 'pen' | 'text'>('pen');
+    const [isDrawing, setIsDrawing] = useState(false);
+
+    // 🚨 Laser Canvas Ref
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const laserCanvasRef = useRef<HTMLCanvasElement>(null);
+    const channelRef = useRef<any>(null);
+    const [attendance, setAttendance] = useState<any[]>([]);
+
     useEffect(() => {
+        // 🚨 Laser Fading Effect Loop
+        let animationFrameId: number;
+        const fade = () => {
+            const canvas = laserCanvasRef.current;
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.globalCompositeOperation = 'destination-out';
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)'; // Fade speed
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.globalCompositeOperation = 'source-over';
+                }
+            }
+            animationFrameId = requestAnimationFrame(fade);
+        };
+        fade();
+        return () => cancelAnimationFrame(animationFrameId);
+    }, []);
+
+    useEffect(() => {
+        if (!presentationId) return;
+
         async function startLive() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return router.push("/sign-in");
 
-            // 1. Fetch the presentation
-            const { data: pres } = await supabase.from("presentations").select("*").eq("id", params.id).single();
+            const { data: pres } = await supabase.from("presentations").select("*").eq("id", presentationId).single();
             if (!pres) return router.push("/teacher/library");
             setPresentation(pres);
 
-            // 2. Create the live session
+            await supabase.from("live_sessions").update({ is_active: false }).eq("teacher_id", user.id).eq("is_active", true);
+
             const { data: session } = await supabase.from("live_sessions").insert({
-                teacher_id: user.id,
-                presentation_id: pres.id,
-                is_active: true,
-                current_slide: 0
+                teacher_id: user.id, presentation_id: pres.id, is_active: true, current_slide: 0
             }).select().single();
 
-            if (session) setSessionId(session.id);
+            if (session) {
+                setSessionId(session.id);
+                channelRef.current = supabase.channel(`live-room-${session.id}`, {
+                    config: { presence: { key: user.id } }
+                });
+
+                channelRef.current
+                    .on('presence', { event: 'sync' }, () => {
+                        const state = channelRef.current.presenceState();
+                        const users = Object.values(state).flat();
+                        const students = users.filter((u: any) => u.role === 'student');
+                        setAttendance(students);
+                    })
+                    .subscribe();
+            }
+            setLoading(false);
         }
         startLive();
-    }, [params.id, supabase, router]);
 
-    // Update DB when slide changes
+        return () => {
+            if (channelRef.current) supabase.removeChannel(channelRef.current);
+        };
+    }, [presentationId, supabase, router]);
+
+    const handleMouseMove = (e: React.MouseEvent) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
+
+        if (tool === 'laser') {
+            // 🚨 Draw locally on teacher screen
+            drawLaser(x, y);
+            // 🚨 Broadcast to student
+            channelRef.current?.send({ type: 'broadcast', event: 'laser', payload: { x, y } });
+        }
+        if (tool === 'pen' && isDrawing) {
+            drawPen(e);
+        }
+    };
+
+    const drawLaser = (x: number, y: number) => {
+        const canvas = laserCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        ctx.beginPath();
+        ctx.arc(x * canvas.width, y * canvas.height, 5, 0, Math.PI * 2); // Dot size
+        ctx.fillStyle = '#ef4444'; // Red
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#ef4444';
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    };
+
+    const startDraw = (e: React.MouseEvent) => {
+        if (tool === 'pen') {
+            setIsDrawing(true);
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.beginPath();
+                ctx.arc(x, y, 2, 0, Math.PI * 2);
+                ctx.fillStyle = "#ef4444";
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+            }
+            channelRef.current?.send({ type: 'broadcast', event: 'dot', payload: { x: x / rect.width, y: y / rect.height } });
+        }
+        if (tool === 'text') {
+            const text = prompt("Enter text to display:");
+            if (text) {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const rect = canvas.getBoundingClientRect();
+                const x = (e.clientX - rect.left) / rect.width;
+                const y = (e.clientY - rect.top) / rect.height;
+
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.fillStyle = "#ef4444";
+                    ctx.font = "30px Arial";
+                    ctx.fillText(text, x * rect.width, y * rect.height);
+                }
+                channelRef.current?.send({ type: 'broadcast', event: 'text', payload: { x, y, text } });
+            }
+        }
+    };
+
+    const drawPen = (e: React.MouseEvent) => {
+        if (!isDrawing || !canvasRef.current) return;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        ctx.lineTo(x, y);
+        ctx.strokeStyle = "#ef4444";
+        ctx.lineWidth = 4;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.stroke();
+
+        if (channelRef.current) {
+            channelRef.current.send({ type: 'broadcast', event: 'draw', payload: { x: x / rect.width, y: y / rect.height } });
+        }
+    };
+
+    const stopDraw = () => setIsDrawing(false);
+
+    const clearCanvas = () => {
+        if (canvasRef.current) {
+            const ctx = canvasRef.current.getContext('2d');
+            if (ctx) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        }
+        channelRef.current?.send({ type: 'broadcast', event: 'clear' });
+    };
+
     const handleSlideChange = async (newSlide: number) => {
         setCurrentSlide(newSlide);
-        if (sessionId) {
-            await supabase.from("live_sessions").update({ current_slide: newSlide }).eq("id", sessionId);
-        }
+        clearCanvas();
+        if (sessionId) await supabase.from("live_sessions").update({ current_slide: newSlide }).eq("id", sessionId);
     };
 
     const endLiveSession = async () => {
-        if (sessionId) {
-            await supabase.from("live_sessions").update({ is_active: false }).eq("id", sessionId);
-        }
+        if (sessionId) await supabase.from("live_sessions").update({ is_active: false }).eq("id", sessionId);
         router.push("/teacher/library");
     };
 
-    if (!presentation) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin w-10 h-10" /></div>;
+    if (loading || !presentation) {
+        return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
+    }
 
     return (
-        <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden">
+        <div
+            className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden relative select-none"
+            onMouseMove={handleMouseMove}
+            onMouseDown={startDraw}
+            onMouseUp={stopDraw}
+            onMouseLeave={stopDraw}
+        >
             <div className="p-4 bg-red-600 text-white flex justify-between items-center z-50">
                 <div className="flex items-center gap-3 font-bold text-lg">
-                    <span className="relative flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
-                    </span>
+                    <span className="relative flex h-3 w-3"><span className="animate-ping absolute h-full w-full rounded-full bg-white opacity-75"></span><span className="relative rounded-full h-3 w-3 bg-white"></span></span>
                     LIVE: {presentation.title}
                 </div>
-                <button onClick={endLiveSession} className="bg-black/30 hover:bg-black/50 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all">
-                    <StopCircle size={18} /> End Presentation
-                </button>
+
+                <div className="flex gap-2 bg-black/30 p-2 rounded-xl">
+                    <button onClick={() => setTool('none')} className={`p-2 rounded-lg ${tool === 'none' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><MousePointer2 size={20} /></button>
+                    <button onClick={() => setTool('laser')} className={`p-2 rounded-lg ${tool === 'laser' ? 'bg-red-500 text-white' : 'hover:bg-white/20'}`}><div className="w-5 h-5 bg-red-400 rounded-full animate-pulse" /></button>
+                    <button onClick={() => setTool('pen')} className={`p-2 rounded-lg ${tool === 'pen' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><PenTool size={20} /></button>
+                    <button onClick={() => setTool('text')} className={`p-2 rounded-lg ${tool === 'text' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><Type size={20} /></button>
+                    <button onClick={clearCanvas} className="p-2 rounded-lg hover:bg-white/20 text-red-200"><Trash2 size={20} /></button>
+                </div>
+
+                <div className="flex items-center gap-4">
+                    <div className="bg-black/30 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2">
+                        <Users size={16} /> {attendance.length} Joined
+                    </div>
+                    <button onClick={endLiveSession} className="bg-black/30 hover:bg-black/50 px-4 py-2 rounded-xl font-bold flex items-center gap-2">
+                        <StopCircle size={18} /> End
+                    </button>
+                </div>
             </div>
-            <div className="flex-1 overflow-hidden">
-                <DeckViewer
-                    deck={presentation.deck_data}
-                    externalSlide={currentSlide}
-                    onSlideChange={handleSlideChange}
+
+            <div className="flex-1 overflow-hidden relative">
+                {presentation.file_url ? (
+                    <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(presentation.file_url)}`} className="w-full h-full border-none pointer-events-none" />
+                ) : (
+                    <DeckViewer deck={presentation.deck_data} externalSlide={currentSlide} onSlideChange={handleSlideChange} />
+                )}
+
+                {/* Annotation Canvas */}
+                <canvas
+                    ref={canvasRef}
+                    className={`absolute inset-0 z-40 ${tool === 'pen' || tool === 'text' ? 'cursor-crosshair' : 'pointer-events-none'}`}
+                    width={window.innerWidth}
+                    height={window.innerHeight}
+                />
+
+                {/* 🚨 Laser Canvas */}
+                <canvas
+                    ref={laserCanvasRef}
+                    className={`absolute inset-0 z-50 ${tool === 'laser' ? 'cursor-crosshair' : 'pointer-events-none'}`}
+                    width={window.innerWidth}
+                    height={window.innerHeight}
                 />
             </div>
         </div>

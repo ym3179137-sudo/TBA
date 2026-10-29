@@ -11,10 +11,29 @@ export default function StudentClassroom() {
     const [loading, setLoading] = useState(true);
     const [liveData, setLiveData] = useState<any>(null);
 
-    const [laserPos, setLaserPos] = useState({ x: 0, y: 0 });
-    const [showLaser, setShowLaser] = useState(false);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const laserCanvasRef = useRef<HTMLCanvasElement>(null);
     const channelRef = useRef<any>(null);
+
+    // 🚨 Laser Fading Effect Loop
+    useEffect(() => {
+        let animationFrameId: number;
+        const fade = () => {
+            const canvas = laserCanvasRef.current;
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.globalCompositeOperation = 'destination-out';
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)'; // Fade speed
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.globalCompositeOperation = 'source-over';
+                }
+            }
+            animationFrameId = requestAnimationFrame(fade);
+        };
+        fade();
+        return () => cancelAnimationFrame(animationFrameId);
+    }, []);
 
     useEffect(() => {
         const getCookie = (name: string) => {
@@ -23,8 +42,6 @@ export default function StudentClassroom() {
             if (parts.length === 2) return parts.pop()?.split(';').shift();
             return "";
         };
-
-        // 🚨 Fix 1 & 2: Provide fallback empty strings to satisfy TypeScript
         const studentId = getCookie("student_id") || "";
         const studentName = decodeURIComponent(getCookie("student_name") || "Student");
 
@@ -65,6 +82,21 @@ export default function StudentClassroom() {
         };
     }, [supabase]);
 
+    const drawLaser = (x: number, y: number) => {
+        const canvas = laserCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        ctx.beginPath();
+        ctx.arc(x * canvas.width, y * canvas.height, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ef4444';
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#ef4444';
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    };
+
     function subscribeToChannel(sessionId: string, studentId: string, studentName: string) {
         if (channelRef.current) supabase.removeChannel(channelRef.current);
 
@@ -73,12 +105,9 @@ export default function StudentClassroom() {
         });
 
         channelRef.current
-            .on('presence', { event: 'sync' }, () => {
-                // Sync is mainly used by the teacher to count students
-            })
+            .on('presence', { event: 'sync' }, () => { })
             .on('broadcast', { event: 'laser' }, (payload: any) => {
-                setLaserPos({ x: payload.payload.x, y: payload.payload.y });
-                setShowLaser(true);
+                drawLaser(payload.payload.x, payload.payload.y);
             })
             .on('broadcast', { event: 'dot' }, (payload: any) => {
                 const canvas = canvasRef.current;
@@ -124,7 +153,6 @@ export default function StudentClassroom() {
                     if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
                 }
             })
-            // 🚨 Fix 3: Explicitly type the 'status' parameter
             .subscribe(async (status: string) => {
                 if (status === 'SUBSCRIBED') {
                     await channelRef.current.track({
@@ -135,13 +163,6 @@ export default function StudentClassroom() {
                 }
             });
     }
-
-    useEffect(() => {
-        if (showLaser) {
-            const timer = setTimeout(() => setShowLaser(false), 1000);
-            return () => clearTimeout(timer);
-        }
-    }, [laserPos, showLaser]);
 
     if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
 
@@ -167,16 +188,18 @@ export default function StudentClassroom() {
                         />
                     )}
 
-                    {showLaser && (
-                        <div
-                            className="absolute w-6 h-6 bg-red-500 rounded-full shadow-[0_0_15px_rgba(239,68,68,0.8)] z-50 pointer-events-none -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 ease-linear"
-                            style={{ left: `${laserPos.x * 100}%`, top: `${laserPos.y * 100}%` }}
-                        />
-                    )}
-
+                    {/* Annotation Canvas */}
                     <canvas
                         ref={canvasRef}
                         className="absolute inset-0 z-40 pointer-events-none"
+                        width={window.innerWidth}
+                        height={window.innerHeight}
+                    />
+
+                    {/* 🚨 Laser Canvas */}
+                    <canvas
+                        ref={laserCanvasRef}
+                        className="absolute inset-0 z-50 pointer-events-none"
                         width={window.innerWidth}
                         height={window.innerHeight}
                     />
