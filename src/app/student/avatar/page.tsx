@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js"; // 🚨 Use Admin Client
 import AvatarStudio from "@/components/ThreeDWorld"; // Adjust path if needed
 
 export default async function AvatarPage() {
@@ -9,8 +9,13 @@ export default async function AvatarPage() {
 
     if (!studentId) redirect("/student-login");
 
-    const supabase = await createClient();
-    const { data: student } = await supabase
+    // 🚨 Bypass RLS to get the actual data
+    const supabaseAdmin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const { data: student } = await supabaseAdmin
         .from("children")
         .select("coins, equipped_skin, unlocked_skins")
         .eq("id", studentId)
