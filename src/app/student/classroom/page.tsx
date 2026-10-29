@@ -18,15 +18,6 @@ export default function StudentClassroom() {
     const channelRef = useRef<any>(null);
 
     useEffect(() => {
-        const getCookie = (name: string) => {
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop()?.split(';').shift();
-            return "";
-        };
-        const studentId = getCookie("student_id");
-        const studentName = decodeURIComponent(getCookie("student_name") || "Student");
-
         async function checkInitialSession() {
             const { data } = await supabase.from("live_sessions").select("*").eq("is_active", true).order('created_at', { ascending: false }).limit(1);
             if (data && data.length > 0) {
@@ -74,13 +65,12 @@ export default function StudentClassroom() {
                 if (!ctx) return;
                 const rect = canvas.getBoundingClientRect();
 
-                // Draw the broadcasted point
                 ctx.lineTo(payload.payload.x * rect.width, payload.payload.y * rect.height);
                 ctx.strokeStyle = "#ef4444";
                 ctx.lineWidth = 4;
                 ctx.lineCap = "round";
                 ctx.stroke();
-                ctx.beginPath(); // Start new path for next segment
+                ctx.beginPath();
                 ctx.moveTo(payload.payload.x * rect.width, payload.payload.y * rect.height);
             })
             .on('broadcast', { event: 'clear' }, () => {
@@ -93,7 +83,6 @@ export default function StudentClassroom() {
             .subscribe();
     }
 
-    // Hide laser after 1 second of no movement
     useEffect(() => {
         if (showLaser) {
             const timer = setTimeout(() => setShowLaser(false), 1000);
@@ -121,11 +110,10 @@ export default function StudentClassroom() {
                             deck={liveData.presentation.deck_data}
                             externalSlide={liveData.current_slide}
                             onSlideChange={() => { }}
-                            isStudentView={true} // 🚨 Locks the Next button
+                            isStudentView={true}
                         />
                     )}
 
-                    {/* 🚨 LIVE LASER POINTER */}
                     {showLaser && (
                         <div
                             className="absolute w-6 h-6 bg-red-500 rounded-full shadow-[0_0_15px_rgba(239,68,68,0.8)] z-50 pointer-events-none -translate-x-1/2 -translate-y-1/2 transition-all duration-75 ease-linear"
@@ -133,7 +121,6 @@ export default function StudentClassroom() {
                         />
                     )}
 
-                    {/* 🚨 LIVE ANNOTATION CANVAS */}
                     <canvas
                         ref={canvasRef}
                         className="absolute inset-0 z-40 pointer-events-none"

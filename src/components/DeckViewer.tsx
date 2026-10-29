@@ -7,7 +7,7 @@ export default function DeckViewer({
     deck,
     externalSlide,
     onSlideChange,
-    isStudentView = false // 🚨 New Prop
+    isStudentView = false
 }: {
     deck: any,
     externalSlide?: number,
@@ -26,6 +26,9 @@ export default function DeckViewer({
 
     const setCurrentSlide = (val: number | ((prev: number) => number)) => {
         const newVal = typeof val === 'function' ? val(currentSlide) : val;
+        // 🚨 If it's a student, they can NEVER go past the current teacher slide
+        if (isStudentView && newVal > currentSlide) return;
+
         if (externalSlide !== undefined && onSlideChange) {
             onSlideChange(newVal);
         } else {
@@ -40,7 +43,16 @@ export default function DeckViewer({
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (isStudentView) return; // 🚨 Students can't use keyboard to change slides
+            // 🚨 Students cannot use arrow keys to go forward
+            if (isStudentView) {
+                if (e.key === "ArrowLeft") {
+                    e.preventDefault();
+                    setCurrentSlide((prev) => Math.max(prev - 1, 0));
+                }
+                return;
+            }
+
+            // Teachers can use all keys
             if (e.key === "ArrowRight" || e.key === " ") {
                 e.preventDefault();
                 setCurrentSlide((prev) => Math.min(prev + 1, deck.slides.length - 1));
@@ -144,7 +156,7 @@ export default function DeckViewer({
                         {currentSlide + 1} / {deck.slides.length}
                     </span>
 
-                    {/* 🚨 Hide the Next button for students in Live Mode */}
+                    {/* 🚨 Hide Next Button for students */}
                     {!isStudentView && (
                         <button
                             onClick={() => setCurrentSlide((p) => Math.min(p + 1, deck.slides.length - 1))}

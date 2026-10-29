@@ -2,12 +2,13 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { cookies } from "next/headers";
-import { Gamepad2, Box, BookOpen, Video, LogOut, FileText, Play } from "lucide-react";
+import { Gamepad2, Box, BookOpen, Video, LogOut, FileText, Play, Radio } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
-// 🚨 Import the images
 import studentBg from "@/pic/100a5ec1-5f72-4fa8-bf39-6a9868de1337.jpg";
 import logoImg from "@/pic/FAV-ICO2.png";
+
+export const dynamic = 'force-dynamic';
 
 export default async function StudentDashboard() {
     const cookieStore = await cookies();
@@ -30,11 +31,19 @@ export default async function StudentDashboard() {
     const coins = studentData?.coins || 0;
     const className = studentData?.class_name || "KG1";
 
-    // Fetch published presentations
+    // 🚨 Check if there is an active live session right now
+    const { data: liveSessions } = await supabaseAdmin
+        .from("live_sessions")
+        .select("*")
+        .eq("is_active", true)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+    const isLive = liveSessions && liveSessions.length > 0;
+
     const { data: presentations } = await supabaseAdmin
         .from("presentations")
         .select("*")
-        .or(`target_type.eq.all,target_type.eq.grade,target_type.eq.student`)
         .order('created_at', { ascending: false });
 
     const myPresentations = presentations?.filter(p =>
@@ -50,13 +59,8 @@ export default async function StudentDashboard() {
             <div className="relative z-10 flex flex-col min-h-screen">
                 <nav className="p-4 flex justify-between items-center max-w-7xl mx-auto w-full bg-slate-950/70 backdrop-blur-lg rounded-b-3xl border-b border-white/10 shadow-2xl">
                     <div className="flex items-center gap-3">
-                        {/* 🚨 FIXED LOGO HERE */}
                         <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg p-1.5 overflow-hidden">
-                            <Image
-                                src={logoImg}
-                                alt="TBA Logo"
-                                className="object-contain w-full h-full"
-                            />
+                            <Image src={logoImg} alt="Logo" className="object-contain w-full h-full" />
                         </div>
                         <span className="text-xl font-extrabold text-white tracking-tight drop-shadow-md">Student Portal</span>
                     </div>
@@ -84,6 +88,21 @@ export default async function StudentDashboard() {
                         <h1 className="text-5xl font-black text-white mb-2 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)]">Welcome back, {studentName}!</h1>
                         <p className="text-white text-xl font-bold drop-shadow-md bg-black/30 inline-block px-4 py-1 rounded-full">Ready for today's adventure?</p>
                     </div>
+
+                    {/* 🚨 LIVE CLASS BANNER */}
+                    {isLive && (
+                        <div className="mb-12 bg-red-600/90 border border-red-500 p-6 rounded-3xl shadow-[0_0_50px_rgba(220,38,38,0.5)] backdrop-blur-xl flex items-center justify-between animate-pulse">
+                            <div>
+                                <h2 className="text-2xl font-black text-white flex items-center gap-3">
+                                    <Radio className="w-8 h-8" /> Your Teacher is Live!
+                                </h2>
+                                <p className="text-red-200 mt-1 font-bold">Click below to join the live classroom right now.</p>
+                            </div>
+                            <Link href="/student/classroom" className="bg-white text-red-600 hover:bg-red-50 font-black px-8 py-4 rounded-xl shadow-xl transition-all text-lg">
+                                Join Live Class
+                            </Link>
+                        </div>
+                    )}
 
                     {myPresentations.length > 0 && (
                         <div className="mb-12 bg-slate-900/80 backdrop-blur-xl border border-emerald-500/30 rounded-3xl p-6 shadow-2xl">

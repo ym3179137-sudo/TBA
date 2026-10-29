@@ -7,11 +7,9 @@ import DeckViewer from "@/components/DeckViewer";
 export const dynamic = 'force-dynamic';
 
 export default async function StudentPresentationPage({ params }: { params: Promise<{ id: string }> }) {
-    // Await the params (Next.js 15/16 requirement)
     const resolvedParams = await params;
     const presentationId = resolvedParams.id;
 
-    // Use Admin Client to fetch the presentation securely
     const supabaseAdmin = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -25,10 +23,9 @@ export default async function StudentPresentationPage({ params }: { params: Prom
 
     if (!presentation) return notFound();
 
-    // 1. If it's an uploaded PowerPoint, use Microsoft Office Viewer
+    // If it's an uploaded PowerPoint
     if (presentation.file_url) {
         const viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(presentation.file_url)}`;
-
         return (
             <div className="h-screen w-screen bg-slate-950 flex flex-col">
                 <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center gap-4">
@@ -46,7 +43,7 @@ export default async function StudentPresentationPage({ params }: { params: Prom
         );
     }
 
-    // 2. Otherwise, use the native AI DeckViewer
+    // AI Presentation - Locked View
     return (
         <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden">
             <div className="absolute top-4 right-4 z-50">
@@ -55,7 +52,8 @@ export default async function StudentPresentationPage({ params }: { params: Prom
                 </Link>
             </div>
             <div className="flex-1 overflow-hidden">
-                <DeckViewer deck={presentation.deck_data} />
+                {/* 🚨 Pass isStudentView={true} to lock the forward button */}
+                <DeckViewer deck={presentation.deck_data} isStudentView={true} />
             </div>
         </div>
     );
