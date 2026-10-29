@@ -1,100 +1,150 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import DeckViewer from "@/components/DeckViewer";
 import { ArrowLeft, Video, Loader2 } from "lucide-react";
 
 export default function StudentClassroom() {
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
     const [loading, setLoading] = useState(true);
     const [liveData, setLiveData] = useState<any>(null);
-    const [studentClassId, setStudentClassId] = useState<string | null>(null);
+
+    // Laser & Annotation State
+    const [laserPos, setLaserPos] = useState({ x: 0, y: 0 });
+    const [showLaser, setShowLaser] = useState(false);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const channelRef = useRef<any>(null);
 
     useEffect(() => {
-        // 1. Get student's class ID from cookie
         const getCookie = (name: string) => {
             const value = `; ${document.cookie}`;
             const parts = value.split(`; ${name}=`);
             if (parts.length === 2) return parts.pop()?.split(';').shift();
             return "";
         };
-
         const studentId = getCookie("student_id");
-        if (!studentId) return;
+        const studentName = decodeURIComponent(getCookie("student_name") || "Student");
 
-        async function fetchClass() {
-            const { data } = await supabase.from("children").select("class_id").eq("id", studentId).single();
-            if (data?.class_id) setStudentClassId(data.class_id);
-            setLoading(false);
-        }
-        fetchClass();
-
-        // 2. Listen for Live Sessions
-        const channel = supabase.channel('live-classroom')
-            .on('postgres_changes', {
-                event: '*', // Listen for INSERT and UPDATE
-                schema: 'public',
-                table: 'live_sessions'
-            }, async (payload) => {
-                const session = payload.new as any;
-
-                // If it's a new active session for this class (or open to all)
-                if (session.is_active) {
-                    // Fetch the presentation data for this session
-                    const { data: pres } = await supabase.from("presentations").select("deck_data, title").eq("id", session.presentation_id).single();
-                    if (pres) {
-                        setLiveData({ ...session, presentation: pres });
-                    }
-                } else {
-                    // Session ended
-                    setLiveData(null);
-                }
-            })
-            .subscribe();
-
-        // 3. Check for an already active session on load
         async function checkInitialSession() {
             const { data } = await supabase.from("live_sessions").select("*").eq("is_active", true).order('created_at', { ascending: false }).limit(1);
             if (data && data.length > 0) {
-                // Fetch presentation
-                const { data: pres } = await supabase.from("presentations").select("deck_data, title").eq("id", data[0].presentation_id).single();
-                if (pres) setLiveData({ ...data[0], presentation: pres });
+                const { data: pres } = await supabase.from("presentations").select("deck_data, title, file_url").eq("id", data[0].presentation_id).single();
+                if (pres) {
+                    setLiveData({ ...data[0], presentation: pres });
+                    subscribeToChannel(data[0].id);
+                }
             }
+            setLoading(false);
         }
         checkInitialSession();
 
-        return () => { supabase.removeChannel(channel); };
+        const dbChannel = supabase.channel('live-db-changes')
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'live_sessions' }, async (payload) => {
+                const session = payload.new as any;
+                if (session.is_active) {
+                    const { data: pres } = await supabase.from("presentations").select("deck_data, title, file_url").eq("id", session.presentation_id).single();
+                    if (pres) setLiveData({ ...session, presentation: pres });
+                } else {
+                    setLiveData(null);
+                }
+            }).subscribe();
+
+        return () => {
+            supabase.removeChannel(dbChannel);
+            if (channelRef.current) supabase.removeChannel(channelRef.current);
+        };
     }, [supabase]);
+
+    function subscribeToChannel(sessionId: string) {
+        if (channelRef.current) supabase.removeChannel(channelRef.current);
+
+        channelRef.current = supabase.channel(`live-room-${sessionId}`);
+
+        channelRef.current
+            .on('broadcast', { event: 'laser' }, (payload: any) => {
+                setLaserPos({ x: payload.payload.x, y: payload.payload.y });
+                setShowLaser(true);
+            })
+            .on('broadcast', { event: 'draw' }, (payload: any) => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return;
+                const rect = canvas.getBoundingClientRect();
+
+                // Draw the broadcasted point
+                ctx.lineTo(payload.payload.x * rect.width, payload.payload.y * rect.height);
+                ctx.strokeStyle = "#ef4444";
+                ctx.lineWidth = 4;
+                ctx.lineCap = "round";
+                ctx.stroke();
+                ctx.beginPath(); // Start new path for next segment
+                ctx.moveTo(payload.payload.x * rect.width, payload.payload.y * rect.height);
+            })
+            .on('broadcast', { event: 'clear' }, () => {
+                const canvas = canvasRef.current;
+                if (canvas) {
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+                }
+            })
+            .subscribe();
+    }
+
+    // Hide laser after 1 second of no movement
+    useEffect(() => {
+        if (showLaser) {
+            const timer = setTimeout(() => setShowLaser(false), 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [laserPos, showLaser]);
 
     if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
 
-    // If Teacher is live, take over the whole screen
     if (liveData) {
         return (
-            <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden">
+            <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden relative">
                 <div className="p-4 bg-emerald-600 text-white flex justify-between items-center z-50">
                     <div className="flex items-center gap-3 font-bold text-lg">
-                        <span className="relative flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
-                        </span>
+                        <span className="relative flex h-3 w-3"><span className="animate-ping absolute h-full w-full rounded-full bg-white opacity-75"></span><span className="relative rounded-full h-3 w-3 bg-white"></span></span>
                         LIVE CLASS: {liveData.presentation.title}
                     </div>
                 </div>
-                <div className="flex-1 overflow-hidden">
-                    <DeckViewer
-                        deck={liveData.presentation.deck_data}
-                        externalSlide={liveData.current_slide}
-                        onSlideChange={() => { }} // Student cannot change slides
+
+                <div className="flex-1 overflow-hidden relative">
+                    {liveData.presentation.file_url ? (
+                        <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(liveData.presentation.file_url)}`} className="w-full h-full border-none" />
+                    ) : (
+                        <DeckViewer
+                            deck={liveData.presentation.deck_data}
+                            externalSlide={liveData.current_slide}
+                            onSlideChange={() => { }}
+                            isStudentView={true} // 🚨 Locks the Next button
+                        />
+                    )}
+
+                    {/* 🚨 LIVE LASER POINTER */}
+                    {showLaser && (
+                        <div
+                            className="absolute w-6 h-6 bg-red-500 rounded-full shadow-[0_0_15px_rgba(239,68,68,0.8)] z-50 pointer-events-none -translate-x-1/2 -translate-y-1/2 transition-all duration-75 ease-linear"
+                            style={{ left: `${laserPos.x * 100}%`, top: `${laserPos.y * 100}%` }}
+                        />
+                    )}
+
+                    {/* 🚨 LIVE ANNOTATION CANVAS */}
+                    <canvas
+                        ref={canvasRef}
+                        className="absolute inset-0 z-40 pointer-events-none"
+                        width={window.innerWidth}
+                        height={window.innerHeight}
                     />
                 </div>
             </div>
         );
     }
 
-    // If not live, show waiting screen
     return (
         <div className="min-h-screen bg-slate-950 flex flex-col items-center p-8 font-sans">
             <div className="w-full max-w-4xl">

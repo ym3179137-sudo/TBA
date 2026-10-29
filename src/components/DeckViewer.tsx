@@ -6,23 +6,20 @@ import { ArrowLeft, ArrowRight, Loader2, ImageOff } from "lucide-react";
 export default function DeckViewer({
     deck,
     externalSlide,
-    onSlideChange
+    onSlideChange,
+    isStudentView = false // 🚨 New Prop
 }: {
     deck: any,
     externalSlide?: number,
-    onSlideChange?: (index: number) => void
+    onSlideChange?: (index: number) => void,
+    isStudentView?: boolean
 }) {
     const [internalSlide, setInternalSlide] = useState(0);
     const [imgLoading, setImgLoading] = useState(true);
     const [imgError, setImgError] = useState(false);
 
-    // 🚨 Safety check: If there is no deck data, don't crash
     if (!deck || !deck.slides || deck.slides.length === 0) {
-        return (
-            <div className="flex h-full w-full items-center justify-center bg-slate-950 text-slate-500 font-bold p-8 text-center rounded-3xl">
-                This presentation has no slide data.
-            </div>
-        );
+        return <div className="flex h-full w-full items-center justify-center text-slate-500 font-bold p-8">No slide data.</div>;
     }
 
     const currentSlide = externalSlide !== undefined ? externalSlide : internalSlide;
@@ -43,6 +40,7 @@ export default function DeckViewer({
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            if (isStudentView) return; // 🚨 Students can't use keyboard to change slides
             if (e.key === "ArrowRight" || e.key === " ") {
                 e.preventDefault();
                 setCurrentSlide((prev) => Math.min(prev + 1, deck.slides.length - 1));
@@ -53,7 +51,7 @@ export default function DeckViewer({
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [deck.slides.length, currentSlide]);
+    }, [deck.slides.length, currentSlide, isStudentView]);
 
     const slide = deck.slides[currentSlide];
     if (!slide) return null;
@@ -103,11 +101,9 @@ export default function DeckViewer({
 
                 <div className={`flex-1 w-full max-w-lg relative ${layout === 'centered' ? 'mt-8' : ''}`}>
                     <div className="relative aspect-[4/3] w-full rounded-3xl overflow-hidden shadow-2xl border-4 border-slate-800 bg-slate-900 group">
-
                         {imgLoading && !imgError && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-slate-900">
                                 <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-3" />
-                                <p className="text-xs text-emerald-400 font-bold uppercase tracking-widest animate-pulse">Loading...</p>
                             </div>
                         )}
                         {imgError ? (
@@ -147,13 +143,17 @@ export default function DeckViewer({
                     <span className="font-bold text-sm text-slate-400">
                         {currentSlide + 1} / {deck.slides.length}
                     </span>
-                    <button
-                        onClick={() => setCurrentSlide((p) => Math.min(p + 1, deck.slides.length - 1))}
-                        disabled={currentSlide === deck.slides.length - 1}
-                        className="p-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-30 shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
-                    >
-                        <ArrowRight className="w-5 h-5" />
-                    </button>
+
+                    {/* 🚨 Hide the Next button for students in Live Mode */}
+                    {!isStudentView && (
+                        <button
+                            onClick={() => setCurrentSlide((p) => Math.min(p + 1, deck.slides.length - 1))}
+                            disabled={currentSlide === deck.slides.length - 1}
+                            className="p-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-30 shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
+                        >
+                            <ArrowRight className="w-5 h-5" />
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
