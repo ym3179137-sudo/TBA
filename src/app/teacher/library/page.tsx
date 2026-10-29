@@ -44,18 +44,25 @@ export default function TeacherLibrary() {
         if (!file) return;
 
         setUploading(true);
+
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!user) {
+            alert("You must be logged in to upload.");
+            setUploading(false);
+            return;
+        }
 
         // 1. Upload file to Supabase Storage
         const fileExt = file.name.split('.').pop();
         const fileName = `${Math.random()}.${fileExt}`;
+
         const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('presentations') // Make sure you create a public bucket called 'presentations' in Supabase Storage
+            .from('presentations')
             .upload(`uploads/${fileName}`, file);
 
         if (uploadError) {
-            alert("Failed to upload file. Ensure you created a public bucket named 'presentations'.");
+            // 🚨 SHOW THE REAL ERROR
+            alert("Upload Error: " + uploadError.message);
             setUploading(false);
             return;
         }
@@ -66,13 +73,17 @@ export default function TeacherLibrary() {
             .getPublicUrl(`uploads/${fileName}`);
 
         // 3. Save to Database
-        await supabase.from("presentations").insert({
+        const { error: dbError } = await supabase.from("presentations").insert({
             teacher_id: user.id,
             title: file.name.replace('.pptx', ''),
             file_url: publicUrl,
             deck_data: {}, // No AI data
             target_type: 'all'
         });
+
+        if (dbError) {
+            alert("Database Error: " + dbError.message);
+        }
 
         setUploading(false);
         fetchPresentations();
@@ -83,9 +94,9 @@ export default function TeacherLibrary() {
             <div className="max-w-6xl mx-auto">
 
                 {/* Header */}
-                <div className="flex justify-between items-center mb-8">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                     <div>
-                        <Link href="/teacher" className="inline-flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white mb-2">
+                        <Link href="/teacher" className="inline-flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white mb-2 transition-colors">
                             <ArrowLeft size={16} /> Back to AI Designer
                         </Link>
                         <h1 className="text-3xl font-extrabold text-white flex items-center gap-3">
@@ -93,12 +104,12 @@ export default function TeacherLibrary() {
                         </h1>
                     </div>
 
-                    <div className="flex gap-4">
-                        <label className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-white font-bold px-5 py-3 rounded-xl flex items-center gap-2 transition-all shadow-lg border border-slate-700">
+                    <div className="flex gap-4 w-full md:w-auto">
+                        <label className="cursor-pointer flex-1 md:flex-none bg-slate-800 hover:bg-slate-700 text-white font-bold px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg border border-slate-700">
                             {uploading ? <span className="animate-pulse">Uploading...</span> : <><UploadCloud size={18} /> Upload PowerPoint</>}
-                            <input type="file" accept=".pptx" onChange={handleUpload} className="hidden" />
+                            <input type="file" accept=".pptx" onChange={handleUpload} className="hidden" disabled={uploading} />
                         </label>
-                        <Link href="/teacher" className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-3 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20">
+                        <Link href="/teacher" className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20">
                             <Plus size={18} /> Create New
                         </Link>
                     </div>
@@ -106,9 +117,9 @@ export default function TeacherLibrary() {
 
                 {/* Presentations Grid */}
                 {loading ? (
-                    <div className="text-center text-slate-500 mt-20">Loading your library...</div>
+                    <div className="text-center text-slate-500 mt-20 animate-pulse">Loading your library...</div>
                 ) : presentations.length === 0 ? (
-                    <div className="text-center mt-20">
+                    <div className="text-center mt-20 bg-slate-900/50 border border-slate-800 rounded-3xl p-12">
                         <FileText className="w-20 h-20 mx-auto text-slate-700 mb-4" />
                         <h2 className="text-2xl font-bold text-slate-500">No presentations yet</h2>
                         <p className="text-slate-600 mt-2">Create one with AI or upload a PowerPoint file.</p>
