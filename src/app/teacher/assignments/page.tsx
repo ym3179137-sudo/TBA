@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -17,7 +17,11 @@ export default function TeacherAssignmentsPage() {
     // --- STATE VARIABLES ---
     const [title, setTitle] = useState("");
     const [type, setType] = useState<"doc" | "form">("form");
-    const [targetGrade, setTargetGrade] = useState("KG1");
+
+    // 🚨 Custom Class State
+    const [classes, setClasses] = useState<any[]>([]);
+    const [targetClassId, setTargetClassId] = useState("");
+
     const [lockMode, setLockMode] = useState(false);
 
     // Form Builder State
@@ -25,7 +29,7 @@ export default function TeacherAssignmentsPage() {
         { id: "q1", type: "short_text", label: "Question 1", required: true }
     ]);
 
-    // Doc Mode State (Upload/Drive Link)
+    // Doc Mode State
     const [docUrl, setDocUrl] = useState("");
     const [uploading, setUploading] = useState(false);
 
@@ -33,6 +37,25 @@ export default function TeacherAssignmentsPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState(false);
+
+    // Fetch Custom Classes
+    useEffect(() => {
+        async function fetchClasses() {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            const { data } = await supabase
+                .from("teacher_classes")
+                .select("id, name")
+                .eq("teacher_id", user.id)
+                .order("created_at", { ascending: true });
+
+            if (data) {
+                setClasses(data);
+                if (data.length > 0) setTargetClassId(data[0].id);
+            }
+        }
+        fetchClasses();
+    }, [supabase]);
 
     // --- HELPERS ---
     const addQuestion = (qType: string) => {
@@ -79,9 +102,9 @@ export default function TeacherAssignmentsPage() {
         }
     };
 
-    // 🚨 THE CREATE FUNCTION (Now using fetch)
     const handleCreate = async () => {
         if (!title.trim()) return setError("Please enter an assignment title.");
+        if (!targetClassId) return setError("Please select a class to send this to.");
 
         setLoading(true);
         setError("");
@@ -96,14 +119,13 @@ export default function TeacherAssignmentsPage() {
                 settingsPayload.docUrl = docUrl;
             }
 
-            // Call the API route instead of the Server Action
             const res = await fetch("/api/assignments/create", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     title,
                     type,
-                    target_grade: targetGrade,
+                    target_class_id: targetClassId, // 🚨 Send Custom Class ID
                     settings: settingsPayload
                 }),
             });
@@ -124,7 +146,6 @@ export default function TeacherAssignmentsPage() {
         }
     };
 
-    // --- RENDER ---
     return (
         <div className="min-h-screen bg-slate-950 text-slate-200 p-8 font-sans">
             <div className="max-w-4xl mx-auto">
@@ -164,16 +185,16 @@ export default function TeacherAssignmentsPage() {
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-bold text-slate-400 mb-2">Target Grade</label>
+                            <label className="block text-sm font-bold text-slate-400 mb-2">Target Class</label>
                             <select
-                                value={targetGrade}
-                                onChange={e => setTargetGrade(e.target.value)}
+                                value={targetClassId}
+                                onChange={e => setTargetClassId(e.target.value)}
                                 className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:border-emerald-500 outline-none"
                             >
-                                <option value="Pre-K">Pre-K</option>
-                                <option value="KG1">KG1</option>
-                                <option value="KG2">KG2</option>
-                                <option value="Grade 1">Grade 1</option>
+                                {classes.length === 0 && <option value="">No classes created yet</option>}
+                                {classes.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
                             </select>
                         </div>
                     </div>
@@ -283,7 +304,7 @@ export default function TeacherAssignmentsPage() {
                                 <FileText className="w-16 h-16 text-blue-500 mx-auto mb-4 opacity-50" />
                                 <h3 className="text-xl font-bold text-white mb-2">Source Document (Optional)</h3>
                                 <p className="text-slate-400 max-w-md mx-auto text-sm">
-                                    Upload a Word/PDF file or paste a Google Drive link. The student will see this document alongside a blank text editor.
+                                    Upload a Word/PDF file or paste a Google Drive link.
                                 </p>
                             </div>
 
@@ -312,19 +333,12 @@ export default function TeacherAssignmentsPage() {
                                     />
                                 </div>
                             </div>
-
-                            {docUrl && (
-                                <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-xl flex items-center gap-3">
-                                    <CheckCircle className="text-emerald-400" />
-                                    <p className="text-emerald-400 text-sm font-bold truncate">Document attached: {docUrl}</p>
-                                </div>
-                            )}
                         </div>
                     )}
 
                     <button
                         onClick={handleCreate}
-                        disabled={loading || uploading}
+                        disabled={loading || uploading || classes.length === 0}
                         className="w-full mt-8 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-extrabold text-lg py-4 rounded-xl shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                     >
                         {loading ? <Loader2 className="animate-spin" /> : <Save size={20} />}

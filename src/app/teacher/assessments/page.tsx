@@ -15,6 +15,8 @@ export default function TeacherAssessmentsPage() {
 
     const [assignments, setAssignments] = useState<any[]>([]);
     const [submissions, setSubmissions] = useState<any[]>([]);
+    const [classes, setClasses] = useState<Record<string, string>>({}); // Map class ID to Name
+
     const [selectedAssignment, setSelectedAssignment] = useState<any | null>(null);
     const [selectedSubmission, setSelectedSubmission] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
@@ -27,7 +29,19 @@ export default function TeacherAssessmentsPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return router.push("/sign-in");
 
-        // 1. Fetch Teacher's Assignments
+        // 1. Fetch Custom Classes
+        const { data: classData } = await supabase
+            .from("teacher_classes")
+            .select("id, name")
+            .eq("teacher_id", user.id);
+
+        if (classData) {
+            const classMap: Record<string, string> = {};
+            classData.forEach(c => classMap[c.id] = c.name);
+            setClasses(classMap);
+        }
+
+        // 2. Fetch Teacher's Assignments
         const { data: assignData } = await supabase
             .from("assignments")
             .select("*")
@@ -36,7 +50,7 @@ export default function TeacherAssessmentsPage() {
 
         if (assignData) setAssignments(assignData);
 
-        // 2. Fetch ALL submissions for these assignments
+        // 3. Fetch ALL submissions for these assignments
         if (assignData && assignData.length > 0) {
             const assignIds = assignData.map(a => a.id);
             const { data: subData } = await supabase
@@ -90,6 +104,7 @@ export default function TeacherAssessmentsPage() {
                             {assignments.map(assign => {
                                 const subCount = submissions.filter(s => s.assignment_id === assign.id).length;
                                 const isSelected = selectedAssignment?.id === assign.id;
+                                const className = classes[assign.target_class_id] || "Unassigned";
 
                                 return (
                                     <div
@@ -105,7 +120,7 @@ export default function TeacherAssessmentsPage() {
                                             {assign.type === 'form' ? <ClipboardList className="text-blue-400" size={20} /> : <FileText className="text-amber-400" size={20} />}
                                         </div>
                                         <div className="flex items-center gap-3 text-xs font-bold text-slate-400">
-                                            <span className="bg-slate-950 px-2 py-1 rounded-md">Grade: {assign.target_grade}</span>
+                                            <span className="bg-slate-950 px-2 py-1 rounded-md">Class: {className}</span>
                                             <span className="bg-slate-950 px-2 py-1 rounded-md">{subCount} Submissions</span>
                                             {assign.settings?.lockMode ? (
                                                 <span className="text-red-400 flex items-center gap-1"><Lock size={12} /> Locked</span>

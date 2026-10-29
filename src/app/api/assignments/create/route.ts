@@ -16,7 +16,7 @@ export async function POST(req: Request) {
             teacher_id: user.id,
             title: payload.title,
             type: payload.type,
-            target_grade: payload.target_grade,
+            target_class_id: payload.target_class_id || null, // 🚨 Save custom class ID
             target_student_id: payload.target_student_id || null,
             settings: payload.settings,
         }).select().single();
