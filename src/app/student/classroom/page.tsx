@@ -23,7 +23,9 @@ export default function StudentClassroom() {
             if (parts.length === 2) return parts.pop()?.split(';').shift();
             return "";
         };
-        const studentId = getCookie("student_id");
+
+        // 🚨 Fix 1 & 2: Provide fallback empty strings to satisfy TypeScript
+        const studentId = getCookie("student_id") || "";
         const studentName = decodeURIComponent(getCookie("student_name") || "Student");
 
         async function checkInitialSession() {
@@ -32,16 +34,7 @@ export default function StudentClassroom() {
                 const { data: pres } = await supabase.from("presentations").select("deck_data, title, file_url").eq("id", data[0].presentation_id).single();
                 if (pres) {
                     setLiveData({ ...data[0], presentation: pres });
-                    subscribeToChannel(data[0].id);
-
-                    // 🚨 Log Attendance
-                    if (studentId) {
-                        await supabase.from("live_attendance").insert({
-                            session_id: data[0].id,
-                            student_id: studentId,
-                            student_name: studentName
-                        }).select();
-                    }
+                    subscribeToChannel(data[0].id, studentId, studentName);
                 }
             }
             setLoading(false);
@@ -53,9 +46,16 @@ export default function StudentClassroom() {
                 const session = payload.new as any;
                 if (session.is_active) {
                     const { data: pres } = await supabase.from("presentations").select("deck_data, title, file_url").eq("id", session.presentation_id).single();
-                    if (pres) setLiveData({ ...session, presentation: pres });
+                    if (pres) {
+                        setLiveData({ ...session, presentation: pres });
+                        if (!channelRef.current) subscribeToChannel(session.id, studentId, studentName);
+                    }
                 } else {
                     setLiveData(null);
+                    if (channelRef.current) {
+                        supabase.removeChannel(channelRef.current);
+                        channelRef.current = null;
+                    }
                 }
             }).subscribe();
 
@@ -65,12 +65,17 @@ export default function StudentClassroom() {
         };
     }, [supabase]);
 
-    function subscribeToChannel(sessionId: string) {
+    function subscribeToChannel(sessionId: string, studentId: string, studentName: string) {
         if (channelRef.current) supabase.removeChannel(channelRef.current);
 
-        channelRef.current = supabase.channel(`live-room-${sessionId}`);
+        channelRef.current = supabase.channel(`live-room-${sessionId}`, {
+            config: { presence: { key: studentId } }
+        });
 
         channelRef.current
+            .on('presence', { event: 'sync' }, () => {
+                // Sync is mainly used by the teacher to count students
+            })
             .on('broadcast', { event: 'laser' }, (payload: any) => {
                 setLaserPos({ x: payload.payload.x, y: payload.payload.y });
                 setShowLaser(true);
@@ -119,7 +124,16 @@ export default function StudentClassroom() {
                     if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
                 }
             })
-            .subscribe();
+            // 🚨 Fix 3: Explicitly type the 'status' parameter
+            .subscribe(async (status: string) => {
+                if (status === 'SUBSCRIBED') {
+                    await channelRef.current.track({
+                        role: 'student',
+                        name: studentName,
+                        joined_at: new Date().toISOString()
+                    });
+                }
+            });
     }
 
     useEffect(() => {

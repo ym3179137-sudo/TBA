@@ -20,10 +20,12 @@ export default function TeacherLivePresenter() {
     // Tools & Drawing State
     const [tool, setTool] = useState<'none' | 'laser' | 'pen' | 'text'>('pen');
     const [isDrawing, setIsDrawing] = useState(false);
+    const [teacherLaser, setTeacherLaser] = useState<{ x: number, y: number } | null>(null);
+
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const channelRef = useRef<any>(null);
 
-    // Attendance State
+    // Attendance State (Using Presence)
     const [attendance, setAttendance] = useState<any[]>([]);
 
     useEffect(() => {
@@ -45,18 +47,22 @@ export default function TeacherLivePresenter() {
 
             if (session) {
                 setSessionId(session.id);
-                channelRef.current = supabase.channel(`live-room-${session.id}`);
-                channelRef.current.subscribe();
 
-                // Listen for Attendance
-                const attendChannel = supabase.channel(`attendance-${session.id}`)
-                    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_attendance', filter: `session_id=eq.${session.id}` }, (payload) => {
-                        setAttendance(prev => [...prev, payload.new]);
-                    }).subscribe();
+                // 🚨 Setup Realtime Channel with Presence
+                channelRef.current = supabase.channel(`live-room-${session.id}`, {
+                    config: { presence: { key: user.id } }
+                });
 
-                // Fetch initial attendance
-                const { data: initialAttend } = await supabase.from("live_attendance").select("*").eq("session_id", session.id);
-                if (initialAttend) setAttendance(initialAttend);
+                channelRef.current
+                    .on('presence', { event: 'sync' }, () => {
+                        // Get the current state of everyone in the room
+                        const state = channelRef.current.presenceState();
+                        const users = Object.values(state).flat();
+                        // Filter out the teacher
+                        const students = users.filter((u: any) => u.role === 'student');
+                        setAttendance(students);
+                    })
+                    .subscribe();
             }
             setLoading(false);
         }
@@ -72,8 +78,9 @@ export default function TeacherLivePresenter() {
         const x = (e.clientX - rect.left) / rect.width;
         const y = (e.clientY - rect.top) / rect.height;
 
-        if (tool === 'laser' && channelRef.current) {
-            channelRef.current.send({ type: 'broadcast', event: 'laser', payload: { x, y } });
+        if (tool === 'laser') {
+            setTeacherLaser({ x, y }); // 🚨 Show laser on teacher screen
+            channelRef.current?.send({ type: 'broadcast', event: 'laser', payload: { x, y } });
         }
         if (tool === 'pen' && isDrawing) {
             draw(e);
@@ -93,7 +100,7 @@ export default function TeacherLivePresenter() {
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
                     ctx.beginPath();
-                    ctx.arc(x, y, 2, 0, Math.PI * 2); // Draw a dot on click
+                    ctx.arc(x, y, 2, 0, Math.PI * 2);
                     ctx.fillStyle = "#ef4444";
                     ctx.fill();
                     ctx.beginPath();
@@ -175,7 +182,7 @@ export default function TeacherLivePresenter() {
             onMouseMove={handleMouseMove}
             onMouseDown={startDraw}
             onMouseUp={stopDraw}
-            onMouseLeave={stopDraw}
+            onMouseLeave={() => { setTeacherLaser(null); stopDraw(); }}
         >
             {/* Top Bar */}
             <div className="p-4 bg-red-600 text-white flex justify-between items-center z-50">
@@ -216,6 +223,14 @@ export default function TeacherLivePresenter() {
                     width={window.innerWidth}
                     height={window.innerHeight}
                 />
+
+                {/* 🚨 Teacher's Laser Pointer */}
+                {teacherLaser && tool === 'laser' && (
+                    <div
+                        className="absolute w-6 h-6 bg-red-500 rounded-full shadow-[0_0_15px_rgba(239,68,68,0.8)] z-50 pointer-events-none -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 ease-linear"
+                        style={{ left: `${teacherLaser.x * 100}%`, top: `${teacherLaser.y * 100}%` }}
+                    />
+                )}
             </div>
         </div>
     );
