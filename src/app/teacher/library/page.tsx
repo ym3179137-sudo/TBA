@@ -4,7 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { MonitorPlay, Plus, Play, Edit3, Trash2, ArrowLeft, UploadCloud, FileText } from "lucide-react";
+import {
+    MonitorPlay, Plus, Play, Edit3, Trash2,
+    ArrowLeft, UploadCloud, FileText
+} from "lucide-react";
 
 export default function TeacherLibrary() {
     const router = useRouter();
@@ -61,7 +64,6 @@ export default function TeacherLibrary() {
             .upload(`uploads/${fileName}`, file);
 
         if (uploadError) {
-            // 🚨 SHOW THE REAL ERROR
             alert("Upload Error: " + uploadError.message);
             setUploading(false);
             return;
@@ -77,7 +79,7 @@ export default function TeacherLibrary() {
             teacher_id: user.id,
             title: file.name.replace('.pptx', ''),
             file_url: publicUrl,
-            deck_data: {}, // No AI data
+            deck_data: {}, // No AI data for uploaded files
             target_type: 'all'
         });
 
@@ -96,7 +98,12 @@ export default function TeacherLibrary() {
                 {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                     <div>
-                        <Link href="/teacher" className="inline-flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white mb-2 transition-colors">
+                        {/* 🚨 Added prefetch={false} to stop _rsc errors */}
+                        <Link
+                            href="/teacher"
+                            prefetch={false}
+                            className="inline-flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white mb-2 transition-colors"
+                        >
                             <ArrowLeft size={16} /> Back to AI Designer
                         </Link>
                         <h1 className="text-3xl font-extrabold text-white flex items-center gap-3">
@@ -106,10 +113,26 @@ export default function TeacherLibrary() {
 
                     <div className="flex gap-4 w-full md:w-auto">
                         <label className="cursor-pointer flex-1 md:flex-none bg-slate-800 hover:bg-slate-700 text-white font-bold px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg border border-slate-700">
-                            {uploading ? <span className="animate-pulse">Uploading...</span> : <><UploadCloud size={18} /> Upload PowerPoint</>}
-                            <input type="file" accept=".pptx" onChange={handleUpload} className="hidden" disabled={uploading} />
+                            {uploading ? (
+                                <span className="animate-pulse">Uploading...</span>
+                            ) : (
+                                <><UploadCloud size={18} /> Upload PowerPoint</>
+                            )}
+                            <input
+                                type="file"
+                                accept=".pptx"
+                                onChange={handleUpload}
+                                className="hidden"
+                                disabled={uploading}
+                            />
                         </label>
-                        <Link href="/teacher" className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20">
+
+                        {/* 🚨 Added prefetch={false} */}
+                        <Link
+                            href="/teacher"
+                            prefetch={false}
+                            className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20"
+                        >
                             <Plus size={18} /> Create New
                         </Link>
                     </div>
@@ -142,21 +165,38 @@ export default function TeacherLibrary() {
                                 {/* Info & Actions */}
                                 <div className="p-4 flex-1 flex flex-col justify-between">
                                     <div>
-                                        <h3 className="font-bold text-white text-lg truncate" title={pres.title}>{pres.title}</h3>
-                                        <p className="text-xs text-slate-500 mt-1">{new Date(pres.created_at).toLocaleDateString()}</p>
+                                        <h3 className="font-bold text-white text-lg truncate" title={pres.title}>
+                                            {pres.title}
+                                        </h3>
+                                        <p className="text-xs text-slate-500 mt-1">
+                                            {new Date(pres.created_at).toLocaleDateString()}
+                                        </p>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-2 mt-6">
-                                        <Link href={`/teacher/present/${pres.id}`} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 text-sm transition-all shadow-md">
+                                        {/* 🚨 Added prefetch={false} */}
+                                        <Link
+                                            href={`/teacher/present/${pres.id}`}
+                                            prefetch={false}
+                                            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 text-sm transition-all shadow-md"
+                                        >
                                             <Play size={14} /> Present
                                         </Link>
 
                                         {pres.file_url ? (
-                                            <button onClick={() => handleDelete(pres.id)} className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold py-2 rounded-lg flex items-center justify-center gap-2 text-sm transition-all">
+                                            <button
+                                                onClick={() => handleDelete(pres.id)}
+                                                className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold py-2 rounded-lg flex items-center justify-center gap-2 text-sm transition-all"
+                                            >
                                                 <Trash2 size={14} /> Delete
                                             </button>
                                         ) : (
-                                            <Link href={`/teacher?edit=${pres.id}`} className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 text-sm transition-all">
+                                            /* 🚨 Added prefetch={false} */
+                                            <Link
+                                                href={`/teacher?edit=${pres.id}`}
+                                                prefetch={false}
+                                                className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 text-sm transition-all"
+                                            >
                                                 <Edit3 size={14} /> Edit
                                             </Link>
                                         )}

@@ -4,9 +4,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import DeckViewer from "@/components/DeckViewer";
 
-// 🚨 Next.js 16 requires params to be typed as a Promise
 export default async function TeacherPresentPage({ params }: { params: Promise<{ id: string }> }) {
-    // Await the params to get the ID
     const resolvedParams = await params;
     const presentationId = resolvedParams.id;
 
@@ -21,17 +19,16 @@ export default async function TeacherPresentPage({ params }: { params: Promise<{
         .eq("id", presentationId)
         .single();
 
-    // If no presentation is found, show the 404 page
     if (!presentation) return notFound();
 
-    // If it's an uploaded PowerPoint, use Google Docs Viewer to embed it
+    // 🚨 USE MICROSOFT OFFICE VIEWER (More reliable than Google)
     if (presentation.file_url) {
-        const viewerUrl = `https://docs.google.com/gview?url=${encodeURIComponent(presentation.file_url)}&embedded=true`;
+        const viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(presentation.file_url)}`;
 
         return (
             <div className="h-screen w-screen bg-slate-950 flex flex-col">
                 <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center gap-4">
-                    <Link href="/teacher/library" className="text-slate-400 hover:text-white flex items-center gap-2 font-bold bg-slate-800 px-4 py-2 rounded-xl transition-colors">
+                    <Link href="/teacher/library" prefetch={false} className="text-slate-400 hover:text-white flex items-center gap-2 font-bold bg-slate-800 px-4 py-2 rounded-xl transition-colors">
                         <ArrowLeft size={16} /> Exit Presentation
                     </Link>
                     <h1 className="text-white font-extrabold">{presentation.title}</h1>
@@ -49,7 +46,7 @@ export default async function TeacherPresentPage({ params }: { params: Promise<{
     return (
         <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden">
             <div className="absolute top-4 right-4 z-50">
-                <Link href="/teacher/library" className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-5 py-2.5 rounded-xl border border-slate-700 shadow-2xl flex items-center gap-2 text-sm transition-all">
+                <Link href="/teacher/library" prefetch={false} className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-5 py-2.5 rounded-xl border border-slate-700 shadow-2xl flex items-center gap-2 text-sm transition-all">
                     <ArrowLeft size={16} /> Exit Presenting
                 </Link>
             </div>
