@@ -4,6 +4,9 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import DeckViewer from "@/components/DeckViewer";
 
+// 🚨 FORCE DYNAMIC RENDERING (Stops prefetch caching errors)
+export const dynamic = 'force-dynamic';
+
 export default async function TeacherPresentPage({ params }: { params: Promise<{ id: string }> }) {
     const resolvedParams = await params;
     const presentationId = resolvedParams.id;
@@ -21,7 +24,7 @@ export default async function TeacherPresentPage({ params }: { params: Promise<{
 
     if (!presentation) return notFound();
 
-    // 🚨 USE MICROSOFT OFFICE VIEWER (More reliable than Google)
+    // 🚨 USE MICROSOFT OFFICE VIEWER
     if (presentation.file_url) {
         const viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(presentation.file_url)}`;
 

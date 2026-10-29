@@ -41,7 +41,6 @@ export default function TeacherLibrary() {
         fetchPresentations();
     }
 
-    // 🚨 Handle PowerPoint Uploads
     async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -55,7 +54,6 @@ export default function TeacherLibrary() {
             return;
         }
 
-        // 1. Upload file to Supabase Storage
         const fileExt = file.name.split('.').pop();
         const fileName = `${Math.random()}.${fileExt}`;
 
@@ -69,17 +67,15 @@ export default function TeacherLibrary() {
             return;
         }
 
-        // 2. Get Public URL
         const { data: { publicUrl } } = supabase.storage
             .from('presentations')
             .getPublicUrl(`uploads/${fileName}`);
 
-        // 3. Save to Database
         const { error: dbError } = await supabase.from("presentations").insert({
             teacher_id: user.id,
             title: file.name.replace('.pptx', ''),
             file_url: publicUrl,
-            deck_data: {}, // No AI data for uploaded files
+            deck_data: {},
             target_type: 'all'
         });
 
@@ -95,10 +91,8 @@ export default function TeacherLibrary() {
         <div className="min-h-screen bg-slate-950 text-slate-200 font-sans p-8">
             <div className="max-w-6xl mx-auto">
 
-                {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                     <div>
-                        {/* 🚨 Added prefetch={false} to stop _rsc errors */}
                         <Link
                             href="/teacher"
                             prefetch={false}
@@ -127,7 +121,6 @@ export default function TeacherLibrary() {
                             />
                         </label>
 
-                        {/* 🚨 Added prefetch={false} */}
                         <Link
                             href="/teacher"
                             prefetch={false}
@@ -138,7 +131,6 @@ export default function TeacherLibrary() {
                     </div>
                 </div>
 
-                {/* Presentations Grid */}
                 {loading ? (
                     <div className="text-center text-slate-500 mt-20 animate-pulse">Loading your library...</div>
                 ) : presentations.length === 0 ? (
@@ -152,7 +144,6 @@ export default function TeacherLibrary() {
                         {presentations.map((pres) => (
                             <div key={pres.id} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl hover:border-emerald-500/50 transition-all group flex flex-col">
 
-                                {/* Thumbnail Area */}
                                 <div className="h-40 bg-slate-950 flex items-center justify-center relative overflow-hidden border-b border-slate-800">
                                     <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]" />
                                     {pres.file_url ? (
@@ -162,7 +153,6 @@ export default function TeacherLibrary() {
                                     )}
                                 </div>
 
-                                {/* Info & Actions */}
                                 <div className="p-4 flex-1 flex flex-col justify-between">
                                     <div>
                                         <h3 className="font-bold text-white text-lg truncate" title={pres.title}>
@@ -174,14 +164,13 @@ export default function TeacherLibrary() {
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-2 mt-6">
-                                        {/* 🚨 Added prefetch={false} */}
-                                        <Link
-                                            href={`/teacher/present/${pres.id}`}
-                                            prefetch={false}
+                                        {/* 🚨 Changed to a button using router.push to stop _rsc errors */}
+                                        <button
+                                            onClick={() => router.push(`/teacher/present/${pres.id}`)}
                                             className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 text-sm transition-all shadow-md"
                                         >
                                             <Play size={14} /> Present
-                                        </Link>
+                                        </button>
 
                                         {pres.file_url ? (
                                             <button
@@ -191,7 +180,6 @@ export default function TeacherLibrary() {
                                                 <Trash2 size={14} /> Delete
                                             </button>
                                         ) : (
-                                            /* 🚨 Added prefetch={false} */
                                             <Link
                                                 href={`/teacher?edit=${pres.id}`}
                                                 prefetch={false}
