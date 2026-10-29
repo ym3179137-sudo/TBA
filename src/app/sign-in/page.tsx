@@ -1,136 +1,112 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Blocks, GraduationCap, ArrowRight } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { ArrowLeft, GraduationCap } from "lucide-react";
 
-export default function SignInPage() {
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    const supabase = createClient();
-
+export default function SignIn() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-    const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const router = useRouter();
+    const supabase = createClient();
 
-    async function handleSubmit(e: React.FormEvent) {
+    async function handleSignIn(e: React.FormEvent) {
         e.preventDefault();
-        setError(null);
         setLoading(true);
+        setError(null);
 
         const { error } = await supabase.auth.signInWithPassword({ email, password });
 
         if (error) {
+            setError(error.message);
             setLoading(false);
-            setError("Invalid email or password.");
-
-            try {
-                await fetch("/api/security/log-failure", {
-                    method: "POST",
-                    body: JSON.stringify({ email }),
-                });
-            } catch (err) { }
-            return;
+        } else {
+            router.push("/dashboard");
+            router.refresh();
         }
-
-        document.cookie = `tba_login_time=${Date.now()}; path=/; max-age=86400; SameSite=Lax`;
-        router.push(searchParams.get("next") || "/dashboard");
-        router.refresh();
     }
 
     return (
-        <main className="min-h-screen flex bg-slate-50">
-            {/* Left side - Branding */}
-            <div className="hidden lg:flex w-1/2 bg-emerald-600 flex-col items-center justify-center p-12 text-white relative overflow-hidden">
-                <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-emerald-500 rounded-full mix-blend-multiply filter blur-3xl opacity-50"></div>
-                <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-emerald-700 rounded-full mix-blend-multiply filter blur-3xl opacity-50"></div>
+        <div className="min-h-screen bg-slate-950 flex text-slate-200 font-sans">
 
-                <div className="relative z-10 text-center">
-                    <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-8 shadow-xl">
-                        <Blocks className="w-10 h-10 text-emerald-600" />
+            {/* Left Side - Branding (Hidden on mobile) */}
+            <div className="hidden lg:flex w-1/2 bg-slate-900 relative flex-col items-center justify-center p-12 overflow-hidden border-r border-slate-800">
+                <div className="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] bg-emerald-600/20 blur-[120px] rounded-full pointer-events-none" />
+                <div className="absolute bottom-[-20%] right-[-20%] w-[80%] h-[80%] bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none" />
+
+                <div className="relative z-10 text-center flex flex-col items-center">
+                    <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-2xl shadow-emerald-500/20 mb-8 p-2">
+                        <img src="/images/logo.png" alt="Logo" className="object-contain w-full h-full" />
                     </div>
-                    <h1 className="text-5xl font-extrabold mb-4">The Baby Academy</h1>
-                    <p className="text-emerald-100 text-lg max-w-md mx-auto">
-                        Nurturing the next generation of curious minds with interactive, AI-powered learning.
-                    </p>
+                    <h1 className="text-4xl font-extrabold text-white mb-4 tracking-tight">The Baby Academy</h1>
+                    <p className="text-lg text-slate-400 max-w-md">Nurturing the next generation of curious minds with interactive, AI-powered learning.</p>
                 </div>
             </div>
 
-            {/* Right side - Forms */}
-            <div className="w-full lg:w-1/2 flex items-center justify-center p-6">
-                <div className="w-full max-w-md space-y-6">
+            {/* Right Side - Login Form */}
+            <div className="w-full lg:w-1/2 flex items-center justify-center p-6 relative">
+                <Link href="/" className="absolute top-8 left-8 flex items-center gap-2 text-slate-400 hover:text-white transition-colors font-medium">
+                    <ArrowLeft size={20} /> Back
+                </Link>
 
-                    <div className="text-center mb-8">
-                        <h2 className="text-3xl font-bold text-slate-900">Welcome Back</h2>
-                        <p className="text-slate-500 mt-2">Please enter your details to sign in.</p>
+                <div className="w-full max-w-md">
+                    <div className="text-center mb-10">
+                        <h2 className="text-3xl font-extrabold text-white mb-2">Welcome Back</h2>
+                        <p className="text-slate-400">Please enter your details to sign in.</p>
                     </div>
 
-                    <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl shadow-xl border border-slate-100 space-y-5">
-                        {searchParams.get("message") && (
-                            <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-sm border border-amber-200 text-center font-medium">
-                                {searchParams.get("message")}
-                            </div>
-                        )}
+                    {error && <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-xl mb-6 text-sm text-center">{error}</div>}
 
+                    <form onSubmit={handleSignIn} className="space-y-5 bg-slate-900/50 p-8 rounded-3xl border border-slate-800 backdrop-blur-xl">
                         <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">Email Address</label>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Email Address</label>
                             <input
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
-                                className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                                placeholder="name@example.com"
+                                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                                placeholder="you@example.com"
                             />
                         </div>
-
                         <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">Password</label>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
                             <input
                                 type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
-                                className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                                className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
                                 placeholder="••••••••"
                             />
                         </div>
 
-                        {error && <p className="text-sm text-red-600 font-medium text-center bg-red-50 p-2 rounded-lg">{error}</p>}
-
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-50 shadow-md"
+                            className="w-full bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold text-lg py-3 rounded-xl transition-all shadow-lg shadow-indigo-500/25 disabled:opacity-50"
                         >
-                            {loading ? "Signing in…" : "Sign In"}
+                            {loading ? "Signing in..." : "Sign In"}
                         </button>
 
-                        <p className="text-sm text-slate-500 text-center pt-2">
-                            Don't have an account?{" "}
-                            <Link href="/sign-up" className="text-emerald-600 font-bold hover:underline">
-                                Create one
-                            </Link>
+                        <p className="text-center text-slate-400 text-sm pt-4">
+                            Don't have an account? <Link href="/sign-up" className="text-indigo-400 hover:text-indigo-300 font-bold">Create one</Link>
                         </p>
                     </form>
 
-                    {/* 🎒 THE STUDENT LOGIN BUTTON */}
-                    <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-100 text-center">
-                        <p className="text-sm font-bold text-slate-500 mb-3 uppercase tracking-wider">Are you a student?</p>
-                        <Link
-                            href="/student-login"
-                            className="flex items-center justify-center gap-3 w-full bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-500 hover:to-orange-500 text-amber-950 font-extrabold text-lg py-4 rounded-xl shadow-md transition-transform active:scale-95 group"
-                        >
-                            <GraduationCap className="w-6 h-6 group-hover:rotate-12 transition-transform" />
-                            Student Login
-                            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                    {/* Student Login Button */}
+                    <div className="mt-6 bg-slate-900/50 p-6 rounded-3xl border border-slate-800 text-center backdrop-blur-xl">
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Are you a student?</p>
+                        <Link href="/student-login" className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-lg py-3 rounded-xl transition-all shadow-lg shadow-amber-500/20">
+                            <GraduationCap size={22} /> Student Login
                         </Link>
                     </div>
                 </div>
             </div>
-        </main>
+        </div>
     );
 }
