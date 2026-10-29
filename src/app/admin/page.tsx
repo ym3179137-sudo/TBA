@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import UserActions from "./user-actions";
 import AutoRefresh from "./auto-refresh";
 import UploadForm from "./UploadForm";
-import MeetingControl from "./MeetingControl";
 import {
     ShieldAlert, Activity, CheckCircle, Baby, BrainCircuit,
     Users, HardDrive, Video, UserPlus, Lock
@@ -38,19 +38,20 @@ export default async function AdminPage() {
     const { data: usersData, error } = await supabase.rpc("get_all_users");
     const users = usersData as any[] | null;
 
+    // Fetch Pending Students (Waiting for Admin Approval)
     const { data: pendingChildren } = await supabase
         .from("children")
         .select("*")
         .eq("is_approved", false)
         .order("created_at", { ascending: false });
 
-    // 🚨 FETCH TEACHERS FOR ASSIGNMENT
+    // Fetch Teachers for Assignment Dropdown
     const { data: teachers } = await supabase
         .from("tba_profiles")
         .select("id, full_name")
         .eq("role", "teacher");
 
-    // 🚨 FETCH MEETING SETTINGS
+    // Fetch Meeting Settings
     const { data: schoolSettings } = await supabase
         .from("school_settings")
         .select("meetings_enabled_by_admin")
@@ -92,6 +93,7 @@ export default async function AdminPage() {
                         await supabase.from("school_settings").update({
                             meetings_enabled_by_admin: !meetingsEnabled
                         }).eq("id", 1);
+                        revalidatePath("/admin");
                     }}>
                         <button
                             type="submit"
@@ -131,6 +133,7 @@ export default async function AdminPage() {
                                         "use server";
                                         const supabase = await createClient();
                                         await supabase.from("security_alerts").update({ is_resolved: true }).eq("id", alert.id);
+                                        revalidatePath("/admin");
                                     }}>
                                         <button type="submit" className="bg-red-600 hover:bg-red-700 text-white text-sm font-bold py-2 px-4 rounded-xl">Resolve</button>
                                     </form>
@@ -148,7 +151,7 @@ export default async function AdminPage() {
             {/* 👶 PENDING APPROVALS & TEACHER ASSIGNMENT */}
             <section className="bg-slate-900 border border-slate-800 rounded-3xl p-6">
                 <h2 className="text-xl font-bold text-amber-400 flex items-center gap-2 mb-6">
-                    <Baby /> Pending Student Approvals & Class Assignment
+                    <Baby /> Pending Student Approvals & Teacher Assignment
                 </h2>
 
                 {pendingChildren && pendingChildren.length > 0 ? (
@@ -160,6 +163,7 @@ export default async function AdminPage() {
                                     <p className="text-xs text-slate-400">Requested Grade: {child.class_name || "N/A"}</p>
                                 </div>
 
+                                {/* 🚨 ADMIN ASSIGNS TO TEACHER HERE */}
                                 <form action={async (formData) => {
                                     "use server";
                                     const teacherId = formData.get("teacherId");
@@ -170,6 +174,8 @@ export default async function AdminPage() {
                                         teacher_id: teacherId,
                                         is_approved: true
                                     }).eq("id", child.id);
+
+                                    revalidatePath("/admin");
                                 }} className="flex gap-2">
 
                                     <select name="teacherId" required className="flex-1 bg-slate-900 text-white text-sm p-3 rounded-xl border border-slate-700 outline-none focus:border-emerald-500">
