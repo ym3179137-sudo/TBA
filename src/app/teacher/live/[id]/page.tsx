@@ -20,13 +20,45 @@ export default function TeacherLivePresenter() {
     // Tools & Drawing State
     const [tool, setTool] = useState<'none' | 'laser' | 'pen' | 'text'>('pen');
     const [isDrawing, setIsDrawing] = useState(false);
-    const [teacherLaser, setTeacherLaser] = useState<{ x: number, y: number } | null>(null);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const laserCanvasRef = useRef<HTMLCanvasElement>(null);
     const channelRef = useRef<any>(null);
-
-    // Attendance State (Using Presence)
     const [attendance, setAttendance] = useState<any[]>([]);
+
+    // 🚨 Smooth Laser Trace Loop
+    const laserPoints = useRef<{ x: number; y: number; life: number }[]>([]);
+
+    useEffect(() => {
+        let animationFrameId: number;
+        const render = () => {
+            const canvas = laserCanvasRef.current;
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    // Draw fading laser trail
+                    laserPoints.current.forEach((p) => {
+                        p.life -= 0.03; // Fade speed
+                        if (p.life > 0) {
+                            ctx.beginPath();
+                            ctx.arc(p.x * canvas.width, p.y * canvas.height, 6, 0, Math.PI * 2);
+                            ctx.fillStyle = `rgba(239, 68, 68, ${p.life})`;
+                            ctx.shadowBlur = 15;
+                            ctx.shadowColor = '#ef4444';
+                            ctx.fill();
+                        }
+                    });
+                    ctx.shadowBlur = 0;
+                    laserPoints.current = laserPoints.current.filter(p => p.life > 0);
+                }
+            }
+            animationFrameId = requestAnimationFrame(render);
+        };
+        render();
+        return () => cancelAnimationFrame(animationFrameId);
+    }, []);
 
     useEffect(() => {
         if (!presentationId) return;
@@ -47,22 +79,23 @@ export default function TeacherLivePresenter() {
 
             if (session) {
                 setSessionId(session.id);
-
-                // 🚨 Setup Realtime Channel with Presence
                 channelRef.current = supabase.channel(`live-room-${session.id}`, {
-                    config: { presence: { key: user.id } }
+                    config: { presence: { key: user.id } } // 🚨 Use teacher ID as key
                 });
 
                 channelRef.current
                     .on('presence', { event: 'sync' }, () => {
-                        // Get the current state of everyone in the room
                         const state = channelRef.current.presenceState();
                         const users = Object.values(state).flat();
-                        // Filter out the teacher
                         const students = users.filter((u: any) => u.role === 'student');
                         setAttendance(students);
                     })
-                    .subscribe();
+                    .subscribe(async (status: string) => {
+                        if (status === 'SUBSCRIBED') {
+                            // 🚨 Teacher must track to establish presence
+                            await channelRef.current.track({ role: 'teacher', name: 'Teacher' });
+                        }
+                    });
             }
             setLoading(false);
         }
@@ -79,16 +112,16 @@ export default function TeacherLivePresenter() {
         const y = (e.clientY - rect.top) / rect.height;
 
         if (tool === 'laser') {
-            setTeacherLaser({ x, y }); // 🚨 Show laser on teacher screen
+            laserPoints.current.push({ x, y, life: 1.0 });
             channelRef.current?.send({ type: 'broadcast', event: 'laser', payload: { x, y } });
         }
         if (tool === 'pen' && isDrawing) {
-            draw(e);
+            drawPen(e);
         }
     };
 
     const startDraw = (e: React.MouseEvent) => {
-        if (tool === 'pen' || tool === 'laser') {
+        if (tool === 'pen') {
             setIsDrawing(true);
             const canvas = canvasRef.current;
             if (!canvas) return;
@@ -96,18 +129,16 @@ export default function TeacherLivePresenter() {
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
 
-            if (tool === 'pen') {
-                const ctx = canvas.getContext('2d');
-                if (ctx) {
-                    ctx.beginPath();
-                    ctx.arc(x, y, 2, 0, Math.PI * 2);
-                    ctx.fillStyle = "#ef4444";
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.moveTo(x, y);
-                }
-                channelRef.current?.send({ type: 'broadcast', event: 'dot', payload: { x: x / rect.width, y: y / rect.height } });
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.beginPath();
+                ctx.arc(x, y, 2, 0, Math.PI * 2);
+                ctx.fillStyle = "#ef4444";
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(x, y);
             }
+            channelRef.current?.send({ type: 'broadcast', event: 'dot', payload: { x: x / rect.width, y: y / rect.height } });
         }
         if (tool === 'text') {
             const text = prompt("Enter text to display:");
@@ -121,7 +152,7 @@ export default function TeacherLivePresenter() {
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
                     ctx.fillStyle = "#ef4444";
-                    ctx.font = "30px Arial";
+                    ctx.font = "bold 30px Arial";
                     ctx.fillText(text, x * rect.width, y * rect.height);
                 }
                 channelRef.current?.send({ type: 'broadcast', event: 'text', payload: { x, y, text } });
@@ -129,7 +160,7 @@ export default function TeacherLivePresenter() {
         }
     };
 
-    const draw = (e: React.MouseEvent) => {
+    const drawPen = (e: React.MouseEvent) => {
         if (!isDrawing || !canvasRef.current) return;
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
@@ -182,16 +213,14 @@ export default function TeacherLivePresenter() {
             onMouseMove={handleMouseMove}
             onMouseDown={startDraw}
             onMouseUp={stopDraw}
-            onMouseLeave={() => { setTeacherLaser(null); stopDraw(); }}
+            onMouseLeave={stopDraw}
         >
-            {/* Top Bar */}
             <div className="p-4 bg-red-600 text-white flex justify-between items-center z-50">
                 <div className="flex items-center gap-3 font-bold text-lg">
                     <span className="relative flex h-3 w-3"><span className="animate-ping absolute h-full w-full rounded-full bg-white opacity-75"></span><span className="relative rounded-full h-3 w-3 bg-white"></span></span>
                     LIVE: {presentation.title}
                 </div>
 
-                {/* Toolbar */}
                 <div className="flex gap-2 bg-black/30 p-2 rounded-xl">
                     <button onClick={() => setTool('none')} className={`p-2 rounded-lg ${tool === 'none' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><MousePointer2 size={20} /></button>
                     <button onClick={() => setTool('laser')} className={`p-2 rounded-lg ${tool === 'laser' ? 'bg-red-500 text-white' : 'hover:bg-white/20'}`}><div className="w-5 h-5 bg-red-400 rounded-full animate-pulse" /></button>
@@ -217,20 +246,21 @@ export default function TeacherLivePresenter() {
                     <DeckViewer deck={presentation.deck_data} externalSlide={currentSlide} onSlideChange={handleSlideChange} />
                 )}
 
+                {/* Annotation Canvas */}
                 <canvas
                     ref={canvasRef}
-                    className={`absolute inset-0 z-40 ${tool !== 'none' ? 'cursor-crosshair' : 'pointer-events-none'}`}
+                    className="absolute inset-0 z-40 pointer-events-none w-full h-full"
                     width={window.innerWidth}
                     height={window.innerHeight}
                 />
 
-                {/* 🚨 Teacher's Laser Pointer */}
-                {teacherLaser && tool === 'laser' && (
-                    <div
-                        className="absolute w-6 h-6 bg-red-500 rounded-full shadow-[0_0_15px_rgba(239,68,68,0.8)] z-50 pointer-events-none -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 ease-linear"
-                        style={{ left: `${teacherLaser.x * 100}%`, top: `${teacherLaser.y * 100}%` }}
-                    />
-                )}
+                {/* 🚨 Laser Canvas */}
+                <canvas
+                    ref={laserCanvasRef}
+                    className="absolute inset-0 z-50 pointer-events-none w-full h-full"
+                    width={window.innerWidth}
+                    height={window.innerHeight}
+                />
             </div>
         </div>
     );

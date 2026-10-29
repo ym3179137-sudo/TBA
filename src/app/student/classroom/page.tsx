@@ -15,23 +15,36 @@ export default function StudentClassroom() {
     const laserCanvasRef = useRef<HTMLCanvasElement>(null);
     const channelRef = useRef<any>(null);
 
-    // 🚨 Laser Fading Effect Loop
+    // 🚨 Smooth Laser Trace Loop
+    const laserPoints = useRef<{ x: number; y: number; life: number }[]>([]);
+
     useEffect(() => {
         let animationFrameId: number;
-        const fade = () => {
+        const render = () => {
             const canvas = laserCanvasRef.current;
             if (canvas) {
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
-                    ctx.globalCompositeOperation = 'destination-out';
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)'; // Fade speed
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    laserPoints.current.forEach((p) => {
+                        p.life -= 0.03;
+                        if (p.life > 0) {
+                            ctx.beginPath();
+                            ctx.arc(p.x * canvas.width, p.y * canvas.height, 6, 0, Math.PI * 2);
+                            ctx.fillStyle = `rgba(239, 68, 68, ${p.life})`;
+                            ctx.shadowBlur = 15;
+                            ctx.shadowColor = '#ef4444';
+                            ctx.fill();
+                        }
+                    });
+                    ctx.shadowBlur = 0;
+                    laserPoints.current = laserPoints.current.filter(p => p.life > 0);
                 }
             }
-            animationFrameId = requestAnimationFrame(fade);
+            animationFrameId = requestAnimationFrame(render);
         };
-        fade();
+        render();
         return () => cancelAnimationFrame(animationFrameId);
     }, []);
 
@@ -82,32 +95,17 @@ export default function StudentClassroom() {
         };
     }, [supabase]);
 
-    const drawLaser = (x: number, y: number) => {
-        const canvas = laserCanvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        ctx.beginPath();
-        ctx.arc(x * canvas.width, y * canvas.height, 5, 0, Math.PI * 2);
-        ctx.fillStyle = '#ef4444';
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = '#ef4444';
-        ctx.fill();
-        ctx.shadowBlur = 0;
-    };
-
     function subscribeToChannel(sessionId: string, studentId: string, studentName: string) {
         if (channelRef.current) supabase.removeChannel(channelRef.current);
 
         channelRef.current = supabase.channel(`live-room-${sessionId}`, {
-            config: { presence: { key: studentId } }
+            config: { presence: { key: studentId } } // 🚨 Student key
         });
 
         channelRef.current
             .on('presence', { event: 'sync' }, () => { })
             .on('broadcast', { event: 'laser' }, (payload: any) => {
-                drawLaser(payload.payload.x, payload.payload.y);
+                laserPoints.current.push({ x: payload.payload.x, y: payload.payload.y, life: 1.0 });
             })
             .on('broadcast', { event: 'dot' }, (payload: any) => {
                 const canvas = canvasRef.current;
@@ -143,7 +141,7 @@ export default function StudentClassroom() {
                 if (!ctx) return;
                 const rect = canvas.getBoundingClientRect();
                 ctx.fillStyle = "#ef4444";
-                ctx.font = "30px Arial";
+                ctx.font = "bold 30px Arial";
                 ctx.fillText(payload.payload.text, payload.payload.x * rect.width, payload.payload.y * rect.height);
             })
             .on('broadcast', { event: 'clear' }, () => {
@@ -155,6 +153,7 @@ export default function StudentClassroom() {
             })
             .subscribe(async (status: string) => {
                 if (status === 'SUBSCRIBED') {
+                    // 🚨 Track presence so teacher sees us
                     await channelRef.current.track({
                         role: 'student',
                         name: studentName,
@@ -191,7 +190,7 @@ export default function StudentClassroom() {
                     {/* Annotation Canvas */}
                     <canvas
                         ref={canvasRef}
-                        className="absolute inset-0 z-40 pointer-events-none"
+                        className="absolute inset-0 z-40 pointer-events-none w-full h-full"
                         width={window.innerWidth}
                         height={window.innerHeight}
                     />
@@ -199,7 +198,7 @@ export default function StudentClassroom() {
                     {/* 🚨 Laser Canvas */}
                     <canvas
                         ref={laserCanvasRef}
-                        className="absolute inset-0 z-50 pointer-events-none"
+                        className="absolute inset-0 z-50 pointer-events-none w-full h-full"
                         width={window.innerWidth}
                         height={window.innerHeight}
                     />
