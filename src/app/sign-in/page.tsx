@@ -3,8 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { ArrowLeft, GraduationCap } from "lucide-react";
+
+// 🚨 IMPORT YOUR LOGO HERE
+import logoImg from "@/pic/FAV-ICO2.png";
 
 export default function SignIn() {
     const [email, setEmail] = useState("");
@@ -39,8 +43,9 @@ export default function SignIn() {
                 <div className="absolute bottom-[-20%] right-[-20%] w-[80%] h-[80%] bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none" />
 
                 <div className="relative z-10 text-center flex flex-col items-center">
-                    <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-2xl shadow-emerald-500/20 mb-8 p-2">
-                        <img src="/images/logo.png" alt="Logo" className="object-contain w-full h-full" />
+                    <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-2xl shadow-emerald-500/20 mb-8 p-2 overflow-hidden">
+                        {/* 🚨 USING THE IMPORTED IMAGE */}
+                        <Image src={logoImg} alt="Logo" className="object-contain w-full h-full" />
                     </div>
                     <h1 className="text-4xl font-extrabold text-white mb-4 tracking-tight">The Baby Academy</h1>
                     <p className="text-lg text-slate-400 max-w-md">Nurturing the next generation of curious minds with interactive, AI-powered learning.</p>
