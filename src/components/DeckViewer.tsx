@@ -32,14 +32,13 @@ export default function DeckViewer({ deck }: { deck: any }) {
     const slide = deck.slides[currentSlide];
     const layout = slide.layout || "right-image";
 
-    // 🚨 Clean the prompt: remove commas and weird characters so the URL doesn't break
+    // Clean the prompt
     const cleanPrompt = (slide.imagePrompt || slide.heading || "cute cartoon education")
         .replace(/[^a-zA-Z0-9 ]/g, "")
-        .substring(0, 150);
+        .substring(0, 100);
 
-    // 🚨 The AI Image URL
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt)}?width=1024&height=768&nologo=true&seed=${currentSlide}`;
-
+    // 🚨 Use the "flux" model which is faster and has higher rate limits
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt)}?width=1024&height=768&nologo=true&model=flux&seed=${currentSlide}&token=${process.env.NEXT_PUBLIC_POLLINATIONS_API_KEY}`;
     return (
         <div className="relative w-full h-full flex flex-col bg-slate-950">
 
@@ -82,16 +81,16 @@ export default function DeckViewer({ deck }: { deck: any }) {
                         {imgLoading && !imgError && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-slate-900">
                                 <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-3" />
-                                <p className="text-xs text-emerald-400 font-bold uppercase tracking-widest animate-pulse">Painting your image...</p>
+                                <p className="text-xs text-emerald-400 font-bold uppercase tracking-widest animate-pulse">Generating AI Image...</p>
                             </div>
                         )}
 
-                        {/* If the image fails to load, show a nice text box instead of a broken icon */}
+                        {/* 🚨 Graceful Fallback UI if the API fails */}
                         {imgError ? (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-900 to-slate-900 p-8 text-center">
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 p-8 text-center">
                                 <ImageOff className="w-12 h-12 text-indigo-400 mb-4 opacity-50" />
-                                <p className="text-white font-bold text-xl">{slide.heading}</p>
-                                <p className="text-slate-400 mt-2 text-sm">AI image is currently busy. Try generating again in a minute!</p>
+                                <p className="text-white font-bold text-2xl mb-2">{slide.heading}</p>
+                                <p className="text-slate-400 text-sm max-w-xs">The AI image limit was reached. You can still present this slide, or try regenerating it in a few minutes.</p>
                             </div>
                         ) : (
                             <img
