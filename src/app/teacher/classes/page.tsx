@@ -16,7 +16,7 @@ export default function TeacherClassManager() {
 
     // Add Student States
     const [newStudentName, setNewStudentName] = useState("");
-    const [newStudentClassId, setNewStudentClassId] = useState(""); // 🚨 Now stores the ID
+    const [newStudentClassId, setNewStudentClassId] = useState("");
     const [newStudentPin, setNewStudentPin] = useState("");
 
     const [loading, setLoading] = useState(true);
@@ -39,20 +39,21 @@ export default function TeacherClassManager() {
 
         if (classData) {
             setClasses(classData);
-            // Auto-select the first class if available
             if (classData.length > 0 && !newStudentClassId) {
                 setNewStudentClassId(classData[0].id);
             }
         }
 
-        const { data: studentData } = await supabase
+        const { data: studentData, error } = await supabase
             .from("children")
             .select("id, full_name, class_id, class_name")
             .eq("teacher_id", user.id)
             .eq("is_approved", true)
             .order("full_name", { ascending: true });
 
+        if (error) console.error("Error fetching students:", error);
         if (studentData) setStudents(studentData);
+
         setLoading(false);
     }
 
@@ -93,7 +94,7 @@ export default function TeacherClassManager() {
                 body: JSON.stringify({
                     fullName: newStudentName,
                     studentPin: newStudentPin,
-                    classId: newStudentClassId, // 🚨 Sending class ID
+                    classId: newStudentClassId,
                     teacherId: user.id
                 })
             });
@@ -104,7 +105,19 @@ export default function TeacherClassManager() {
             alert("✅ " + data.message);
             setNewStudentName("");
             setNewStudentPin("");
-            fetchData();
+
+            // 🚨 Instantly update UI with the new student
+            if (data.student) {
+                setStudents(prev => {
+                    const exists = prev.find(s => s.id === data.student.id);
+                    if (exists) {
+                        return prev.map(s => s.id === data.student.id ? data.student : s);
+                    }
+                    return [...prev, data.student];
+                });
+            }
+
+            fetchData(); // Sync everything
 
         } catch (err: any) {
             alert("Failed to add student: " + err.message);
@@ -114,9 +127,9 @@ export default function TeacherClassManager() {
     }
 
     async function assignStudent(studentId: string, classId: string) {
-        // If assigning to a class, also update the class_name for easy display
         const className = classes.find(c => c.id === classId)?.name || null;
-        await supabase.from("children").update({ class_id: classId, class_name: className }).eq("id", studentId);
+        const { error } = await supabase.from("children").update({ class_id: classId, class_name: className }).eq("id", studentId);
+        if (error) alert(error.message);
         fetchData();
     }
 
@@ -172,7 +185,6 @@ export default function TeacherClassManager() {
                                     className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 outline-none focus:border-emerald-500"
                                 />
 
-                                {/* 🚨 DROPDOWN OF CREATED CLASSES */}
                                 <select
                                     value={newStudentClassId}
                                     onChange={(e) => setNewStudentClassId(e.target.value)}

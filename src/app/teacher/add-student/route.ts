@@ -5,6 +5,10 @@ export async function POST(req: Request) {
     try {
         const { fullName, studentPin, classId, teacherId } = await req.json();
 
+        if (!classId) {
+            return NextResponse.json({ error: "Please select a class." }, { status: 400 });
+        }
+
         const supabaseAdmin = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -29,7 +33,7 @@ export async function POST(req: Request) {
 
         if (existingStudent) {
             // Link existing student to this teacher and class
-            const { error } = await supabaseAdmin
+            const { data: updatedStudent, error } = await supabaseAdmin
                 .from("children")
                 .update({
                     teacher_id: teacherId,
@@ -37,14 +41,16 @@ export async function POST(req: Request) {
                     class_name: className,
                     is_approved: true
                 })
-                .eq("id", existingStudent.id);
+                .eq("id", existingStudent.id)
+                .select()
+                .single();
 
             if (error) throw error;
-            return NextResponse.json({ success: true, message: "Linked existing student to your class." });
+            return NextResponse.json({ success: true, message: "Linked existing student to your class.", student: updatedStudent });
         }
 
         // Create new student
-        const { error: insertError } = await supabaseAdmin
+        const { data: newStudent, error: insertError } = await supabaseAdmin
             .from("children")
             .insert({
                 teacher_id: teacherId,
@@ -53,13 +59,16 @@ export async function POST(req: Request) {
                 class_name: className,
                 student_pin: studentPin,
                 is_approved: true
-            });
+            })
+            .select()
+            .single();
 
         if (insertError) throw insertError;
 
-        return NextResponse.json({ success: true, message: "Created new student successfully." });
+        return NextResponse.json({ success: true, message: "Created new student successfully.", student: newStudent });
 
     } catch (error: any) {
+        console.error("Add Student Error:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
