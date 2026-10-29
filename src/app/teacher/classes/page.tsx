@@ -14,10 +14,9 @@ export default function TeacherClassManager() {
     const [students, setStudents] = useState<any[]>([]);
     const [newClassName, setNewClassName] = useState("");
 
-    // New Student States
+    // Add Student States
     const [newStudentName, setNewStudentName] = useState("");
-    // 🚨 Changed to allow the teacher to type ANY class/grade name
-    const [newStudentClass, setNewStudentClass] = useState("");
+    const [newStudentClassId, setNewStudentClassId] = useState(""); // 🚨 Now stores the ID
     const [newStudentPin, setNewStudentPin] = useState("");
 
     const [loading, setLoading] = useState(true);
@@ -32,15 +31,20 @@ export default function TeacherClassManager() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return router.push("/sign-in");
 
-        // Fetch teacher's custom classes
         const { data: classData } = await supabase
             .from("teacher_classes")
             .select("*")
             .eq("teacher_id", user.id)
             .order("created_at", { ascending: true });
-        if (classData) setClasses(classData);
 
-        // Fetch ONLY students assigned to this teacher
+        if (classData) {
+            setClasses(classData);
+            // Auto-select the first class if available
+            if (classData.length > 0 && !newStudentClassId) {
+                setNewStudentClassId(classData[0].id);
+            }
+        }
+
         const { data: studentData } = await supabase
             .from("children")
             .select("id, full_name, class_id, class_name")
@@ -49,7 +53,6 @@ export default function TeacherClassManager() {
             .order("full_name", { ascending: true });
 
         if (studentData) setStudents(studentData);
-
         setLoading(false);
     }
 
@@ -69,11 +72,10 @@ export default function TeacherClassManager() {
         fetchData();
     }
 
-    // 🚨 UPDATED: Use the custom typed class name
     async function addNewStudent(e: React.FormEvent) {
         e.preventDefault();
-        if (!newStudentName.trim() || newStudentPin.length !== 4 || !newStudentClass.trim()) {
-            return alert("Please enter a name, a class name, and a 4-digit PIN.");
+        if (!newStudentName.trim() || newStudentPin.length !== 4 || !newStudentClassId) {
+            return alert("Please enter a name, select a class, and enter a 4-digit PIN.");
         }
         setAddingStudent(true);
 
@@ -91,20 +93,18 @@ export default function TeacherClassManager() {
                 body: JSON.stringify({
                     fullName: newStudentName,
                     studentPin: newStudentPin,
-                    grade: newStudentClass, // Pass the custom name here
+                    classId: newStudentClassId, // 🚨 Sending class ID
                     teacherId: user.id
                 })
             });
 
             const data = await res.json();
-
             if (!res.ok) throw new Error(data.error);
 
             alert("✅ " + data.message);
             setNewStudentName("");
             setNewStudentPin("");
-            setNewStudentClass("");
-            fetchData(); // Refresh the list
+            fetchData();
 
         } catch (err: any) {
             alert("Failed to add student: " + err.message);
@@ -114,7 +114,9 @@ export default function TeacherClassManager() {
     }
 
     async function assignStudent(studentId: string, classId: string) {
-        await supabase.from("children").update({ class_id: classId }).eq("id", studentId);
+        // If assigning to a class, also update the class_name for easy display
+        const className = classes.find(c => c.id === classId)?.name || null;
+        await supabase.from("children").update({ class_id: classId, class_name: className }).eq("id", studentId);
         fetchData();
     }
 
@@ -136,15 +138,13 @@ export default function TeacherClassManager() {
 
                 <div className="grid md:grid-cols-3 gap-8">
 
-                    {/* LEFT COLUMN: Forms */}
                     <div className="space-y-6">
-
                         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6">
                             <h2 className="text-xl font-bold text-white mb-4">Create a Class Group</h2>
                             <div className="space-y-4">
                                 <input
                                     type="text"
-                                    placeholder="e.g., KG1 Blue Group"
+                                    placeholder="e.g., Lovely Students"
                                     value={newClassName}
                                     onChange={(e) => setNewClassName(e.target.value)}
                                     className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 outline-none focus:border-indigo-500"
@@ -163,7 +163,6 @@ export default function TeacherClassManager() {
                             <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
                                 <UserPlus className="text-emerald-400" size={20} /> Add Student
                             </h2>
-                            <p className="text-xs text-slate-500 mb-4">Normally the Admin assigns students, but you can add one manually here.</p>
                             <form onSubmit={addNewStudent} className="space-y-4">
                                 <input
                                     type="text"
@@ -173,14 +172,18 @@ export default function TeacherClassManager() {
                                     className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 outline-none focus:border-emerald-500"
                                 />
 
-                                {/* 🚨 FREE TEXT INPUT FOR CLASS NAME */}
-                                <input
-                                    type="text"
-                                    placeholder="Type class name (e.g. Pre-K, Lovely Students...)"
-                                    value={newStudentClass}
-                                    onChange={(e) => setNewStudentClass(e.target.value)}
+                                {/* 🚨 DROPDOWN OF CREATED CLASSES */}
+                                <select
+                                    value={newStudentClassId}
+                                    onChange={(e) => setNewStudentClassId(e.target.value)}
                                     className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 outline-none focus:border-emerald-500"
-                                />
+                                >
+                                    <option value="" disabled>Select a class...</option>
+                                    {classes.length === 0 && <option value="">Create a class first!</option>}
+                                    {classes.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
 
                                 <input
                                     type="text"
@@ -192,8 +195,8 @@ export default function TeacherClassManager() {
                                 />
                                 <button
                                     type="submit"
-                                    disabled={addingStudent}
-                                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all"
+                                    disabled={addingStudent || classes.length === 0}
+                                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                                 >
                                     {addingStudent ? <Loader2 className="animate-spin" size={18} /> : <UserPlus size={18} />} Add to Roster
                                 </button>
@@ -201,7 +204,6 @@ export default function TeacherClassManager() {
                         </div>
                     </div>
 
-                    {/* RIGHT COLUMN: Manage Students */}
                     <div className="md:col-span-2 space-y-6">
 
                         {unassignedStudents.length > 0 && (
@@ -209,17 +211,13 @@ export default function TeacherClassManager() {
                                 <h2 className="text-xl font-bold text-amber-400 mb-4 flex items-center gap-2">
                                     <ShieldAlert size={20} /> New Students Needing a Class Group
                                 </h2>
-                                <p className="text-sm text-amber-200 mb-4">These students are in your roster but not assigned to a specific group yet.</p>
-
                                 <div className="grid sm:grid-cols-2 gap-3">
                                     {unassignedStudents.map(student => (
                                         <div key={student.id} className="flex flex-col bg-slate-950 p-4 rounded-xl border border-amber-500/20 gap-3">
                                             <div>
                                                 <span className="font-bold text-white block">{student.full_name}</span>
-                                                <span className="text-xs text-slate-400">{student.class_name}</span>
                                             </div>
                                             <div className="flex flex-wrap gap-2">
-                                                {classes.length === 0 && <span className="text-xs text-amber-500">Create a class group first to organize them.</span>}
                                                 {classes.map(cls => (
                                                     <button
                                                         key={cls.id}

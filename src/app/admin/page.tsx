@@ -4,9 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import UserActions from "./user-actions";
 import AutoRefresh from "./auto-refresh";
 import UploadForm from "./UploadForm";
+// 🚨 IMPORT THE TRANSFER ACTION
+import { transferTeacherClasses } from "@/app/actions/admin-transfer";
 import {
     ShieldAlert, Activity, CheckCircle, Baby, BrainCircuit,
-    Users, HardDrive, Video, UserPlus, Lock
+    Users, HardDrive, Video, UserPlus, Lock, ArrowRightLeft
 } from "lucide-react";
 
 export default async function AdminPage() {
@@ -98,8 +100,8 @@ export default async function AdminPage() {
                         <button
                             type="submit"
                             className={`w-full py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${meetingsEnabled
-                                    ? 'bg-red-500 hover:bg-red-600 text-white'
-                                    : 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                                ? 'bg-red-500 hover:bg-red-600 text-white'
+                                : 'bg-emerald-500 hover:bg-emerald-600 text-white'
                                 }`}
                         >
                             {meetingsEnabled ? (
@@ -163,7 +165,6 @@ export default async function AdminPage() {
                                     <p className="text-xs text-slate-400">Requested Grade: {child.class_name || "N/A"}</p>
                                 </div>
 
-                                {/* 🚨 ADMIN ASSIGNS TO TEACHER HERE */}
                                 <form action={async (formData) => {
                                     "use server";
                                     const teacherId = formData.get("teacherId");
@@ -195,6 +196,50 @@ export default async function AdminPage() {
                 ) : (
                     <p className="text-slate-500 text-sm text-center py-6">No pending approvals. All students are assigned and verified!</p>
                 )}
+            </section>
+
+            {/* 🚨 TEACHER HANDOVER SYSTEM */}
+            <section className="bg-slate-900 border border-slate-800 rounded-3xl p-6">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-2">
+                    <ArrowRightLeft className="text-blue-400" /> Teacher Handover & Substitutes
+                </h2>
+                <p className="text-sm text-slate-400 mb-6">
+                    Transfer all classes and students from one teacher to another (e.g., for a substitute) or leave them unassigned if a teacher leaves.
+                </p>
+
+                <form action={async (formData) => {
+                    "use server";
+                    const fromId = formData.get("fromId") as string;
+                    const toId = formData.get("toId") as string || null;
+                    if (!fromId) return;
+
+                    await transferTeacherClasses(fromId, toId);
+                }} className="flex flex-col md:flex-row gap-4 items-end bg-slate-950 p-6 rounded-2xl border border-slate-800">
+
+                    <div className="flex-1 w-full">
+                        <label className="block text-xs font-bold text-slate-400 mb-2">From Teacher (Leaving/Absent)</label>
+                        <select name="fromId" required className="w-full bg-slate-900 text-white text-sm p-3 rounded-xl border border-slate-700 outline-none focus:border-blue-500">
+                            <option value="">Select Teacher...</option>
+                            {teachers?.map(t => (
+                                <option key={t.id} value={t.id}>{t.full_name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="flex-1 w-full">
+                        <label className="block text-xs font-bold text-slate-400 mb-2">To Teacher (Substitute/New)</label>
+                        <select name="toId" className="w-full bg-slate-900 text-white text-sm p-3 rounded-xl border border-slate-700 outline-none focus:border-emerald-500">
+                            <option value="">Leave Unassigned (Archive)</option>
+                            {teachers?.map(t => (
+                                <option key={t.id} value={t.id}>{t.full_name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <button type="submit" className="w-full md:w-auto bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-3 rounded-xl transition-colors">
+                        Transfer Classes
+                    </button>
+                </form>
             </section>
 
             {/* 🤖 AI OVERSIGHT & UPLOADER */}
@@ -249,9 +294,9 @@ export default async function AdminPage() {
                                     <td className="p-4 text-slate-400">{u.email}</td>
                                     <td className="p-4">
                                         <span className={`px-3 py-1 rounded-full text-xs font-bold ${u.role === 'admin' ? 'bg-purple-500/20 text-purple-400' :
-                                                u.role === 'teacher' ? 'bg-blue-500/20 text-blue-400' :
-                                                    u.role === 'student' ? 'bg-amber-500/20 text-amber-400' :
-                                                        'bg-emerald-500/20 text-emerald-400'
+                                            u.role === 'teacher' ? 'bg-blue-500/20 text-blue-400' :
+                                                u.role === 'student' ? 'bg-amber-500/20 text-amber-400' :
+                                                    'bg-emerald-500/20 text-emerald-400'
                                             }`}>
                                             {u.role}
                                         </span>

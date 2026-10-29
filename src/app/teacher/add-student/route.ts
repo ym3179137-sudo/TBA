@@ -3,15 +3,23 @@ import { createClient } from "@supabase/supabase-js";
 
 export async function POST(req: Request) {
     try {
-        const { fullName, studentPin, grade, teacherId } = await req.json();
+        const { fullName, studentPin, classId, teacherId } = await req.json();
 
-        // Use Admin Client to bypass RLS
         const supabaseAdmin = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.SUPABASE_SERVICE_ROLE_KEY!
         );
 
-        // 1. Check if the student already exists anywhere in the school
+        // 1. Fetch the class name from the classId
+        const { data: classData } = await supabaseAdmin
+            .from("teacher_classes")
+            .select("name")
+            .eq("id", classId)
+            .single();
+
+        const className = classData?.name || "Unassigned";
+
+        // 2. Check if student exists
         const { data: existingStudent } = await supabaseAdmin
             .from("children")
             .select("id")
@@ -20,27 +28,29 @@ export async function POST(req: Request) {
             .single();
 
         if (existingStudent) {
-            // 🚨 Student exists! Just update their record to assign them to this teacher
+            // Link existing student to this teacher and class
             const { error } = await supabaseAdmin
                 .from("children")
                 .update({
                     teacher_id: teacherId,
-                    class_name: grade,
+                    class_id: classId,
+                    class_name: className,
                     is_approved: true
                 })
                 .eq("id", existingStudent.id);
 
             if (error) throw error;
-            return NextResponse.json({ success: true, message: "Linked existing student to your roster." });
+            return NextResponse.json({ success: true, message: "Linked existing student to your class." });
         }
 
-        // 2. Student doesn't exist. Create a brand new record.
+        // Create new student
         const { error: insertError } = await supabaseAdmin
             .from("children")
             .insert({
                 teacher_id: teacherId,
                 full_name: fullName.trim(),
-                class_name: grade,
+                class_id: classId,
+                class_name: className,
                 student_pin: studentPin,
                 is_approved: true
             });
@@ -50,7 +60,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true, message: "Created new student successfully." });
 
     } catch (error: any) {
-        console.error("Add Student Error:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
