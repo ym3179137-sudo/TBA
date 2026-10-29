@@ -7,10 +7,9 @@ import Link from "next/link";
 import Image from "next/image";
 import {
     UserPlus, LogOut, CheckCircle, Clock, Trash2,
-    Trophy, BookOpen, MessageSquare, X, BarChart2
+    Trophy, BookOpen, MessageSquare, X, BarChart2, Loader2
 } from "lucide-react";
 
-// 🚨 Import your logo
 import logoImg from "@/pic/FAV-ICO2.png";
 
 export default function ParentPage() {
@@ -21,8 +20,10 @@ export default function ParentPage() {
     const [pin, setPin] = useState("");
     const [loading, setLoading] = useState(false);
 
-    // 🚨 State for the Grade Modal
+    // 🚨 State for the Grade Modal & DB Fetching
     const [selectedChild, setSelectedChild] = useState<any | null>(null);
+    const [gradeData, setGradeData] = useState<{ rank: number, total: number, results: any[] } | null>(null);
+    const [fetchingGrades, setFetchingGrades] = useState(false);
 
     const supabase = createClient();
     const router = useRouter();
@@ -84,9 +85,58 @@ export default function ParentPage() {
         router.refresh();
     }
 
+    // 🚨 FETCH REAL GRADES FROM DATABASE
+    async function openGradeModal(child: any) {
+        setSelectedChild(child);
+        setFetchingGrades(true);
+        setGradeData(null);
+
+        try {
+            // 1. Fetch all students in the same class to calculate rank
+            const { data: classmates } = await supabase
+                .from("children")
+                .select("id, total_points_earned")
+                .eq("class_name", child.class_name)
+                .order("total_points_earned", { ascending: false });
+
+            let rank = 0;
+            let total = classmates?.length || 1;
+
+            if (classmates) {
+                const index = classmates.findIndex((c) => c.id === child.id);
+                if (index !== -1) rank = index + 1;
+            }
+
+            // 2. Fetch real assessment results for this child
+            // (Adjust 'assessment_results' if your table is named differently)
+            const { data: results, error } = await supabase
+                .from("assessment_results")
+                .select(`
+                    id,
+                    score,
+                    max_score,
+                    teacher_feedback,
+                    created_at,
+                    assignments (title, subject)
+                `)
+                .eq("student_id", child.id)
+                .order("created_at", { ascending: false });
+
+            setGradeData({
+                rank: rank,
+                total: total,
+                results: results || []
+            });
+
+        } catch (error) {
+            console.error("Failed to fetch grades", error);
+        } finally {
+            setFetchingGrades(false);
+        }
+    }
+
     return (
         <div className="min-h-screen bg-slate-950 text-slate-200 font-sans relative overflow-hidden">
-            {/* 🌌 AMBIENT BACKGROUND GLOWS */}
             <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-emerald-600/10 blur-[120px] rounded-full pointer-events-none" />
             <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/10 blur-[120px] rounded-full pointer-events-none" />
 
@@ -170,19 +220,15 @@ export default function ParentPage() {
                                             </button>
                                         </div>
 
-                                        {/* 🚨 THE HOVER BUTTON */}
                                         <div className="mt-4">
                                             {child.is_approved ? (
                                                 <button
-                                                    onClick={() => setSelectedChild(child)}
+                                                    onClick={() => openGradeModal(child)}
                                                     className="w-full relative overflow-hidden bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold px-4 py-3 rounded-xl transition-all group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-500 group-hover:shadow-lg group-hover:shadow-indigo-500/25 flex items-center justify-center"
                                                 >
-                                                    {/* Default State */}
                                                     <span className="flex items-center gap-2 group-hover:hidden transition-all">
                                                         <CheckCircle className="w-5 h-5" /> Approved
                                                     </span>
-
-                                                    {/* Hover State */}
                                                     <span className="hidden group-hover:flex items-center gap-2 transition-all">
                                                         <BarChart2 className="w-5 h-5" /> View Grades
                                                     </span>
@@ -202,12 +248,11 @@ export default function ParentPage() {
                 </div>
             </div>
 
-            {/* 🚨 GRADE MODAL OVERLAY */}
+            {/* 🚨 REAL GRADE MODAL */}
             {selectedChild && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
                     <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-[2rem] shadow-2xl overflow-hidden relative animate-in fade-in zoom-in duration-200">
 
-                        {/* Modal Header */}
                         <div className="bg-slate-800/50 p-6 border-b border-slate-700 flex justify-between items-center">
                             <div>
                                 <h2 className="text-2xl font-extrabold text-white">{selectedChild.full_name}'s Report</h2>
@@ -218,78 +263,93 @@ export default function ParentPage() {
                             </button>
                         </div>
 
-                        {/* Modal Content */}
                         <div className="p-6 max-h-[70vh] overflow-y-auto space-y-6">
-
-                            {/* 1. Competition / Ranking */}
-                            <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 p-6 rounded-2xl flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-amber-500/20 rounded-full flex items-center justify-center">
-                                        <Trophy className="w-6 h-6 text-amber-400" />
+                            {fetchingGrades ? (
+                                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                                    <Loader2 className="w-10 h-10 animate-spin text-indigo-500 mb-4" />
+                                    <p>Fetching secure data from database...</p>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* 1. Leaderboard Rank */}
+                                    <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 p-6 rounded-2xl flex items-center justify-between">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-amber-500/20 rounded-full flex items-center justify-center">
+                                                <Trophy className="w-6 h-6 text-amber-400" />
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-white text-lg">Class Leaderboard</p>
+                                                <p className="text-sm text-slate-400">Based on total points earned</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-3xl font-extrabold text-amber-400">#{gradeData?.rank || "?"}</p>
+                                            <p className="text-xs text-amber-500 font-bold uppercase tracking-wider">Out of {gradeData?.total || "?"}</p>
+                                        </div>
                                     </div>
+
+                                    {/* 2. Real Assignments & Answers */}
                                     <div>
-                                        <p className="font-bold text-white text-lg">Class Leaderboard</p>
-                                        <p className="text-sm text-slate-400">Compared to other students in {selectedChild.class_name}</p>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-3xl font-extrabold text-amber-400">#3</p>
-                                    <p className="text-xs text-amber-500 font-bold uppercase tracking-wider">Out of 24</p>
-                                </div>
-                            </div>
+                                        <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                                            <BookOpen className="w-5 h-5 text-indigo-400" /> Assignment History
+                                        </h3>
 
-                            {/* 2. Assignments & Answers */}
-                            <div>
-                                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                                    <BookOpen className="w-5 h-5 text-indigo-400" /> Recent Assignments
-                                </h3>
-                                <div className="space-y-3">
-                                    {/* Mock Data for now - You can replace this with real DB data later */}
-                                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
-                                        <div>
-                                            <p className="font-bold text-white">Math Quiz: Addition</p>
-                                            <p className="text-sm text-slate-400">10 questions</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <span className="text-emerald-400 font-bold text-lg">90%</span>
-                                            <p className="text-xs text-slate-500">Grade: A</p>
-                                        </div>
-                                    </div>
-                                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
-                                        <div>
-                                            <p className="font-bold text-white">Science: Animals</p>
-                                            <p className="text-sm text-slate-400">Matching game</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <span className="text-emerald-400 font-bold text-lg">100%</span>
-                                            <p className="text-xs text-slate-500">Grade: A+</p>
-                                        </div>
-                                    </div>
-                                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
-                                        <div>
-                                            <p className="font-bold text-white">English: Spelling</p>
-                                            <p className="text-sm text-slate-400">Fill in the blanks</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <span className="text-amber-400 font-bold text-lg">75%</span>
-                                            <p className="text-xs text-slate-500">Grade: B</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                                        {gradeData?.results.length === 0 ? (
+                                            <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 text-center text-slate-500">
+                                                No assignments completed yet.
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {gradeData?.results.map((result: any) => {
+                                                    const percentage = Math.round((result.score / (result.max_score || 100)) * 100);
+                                                    const isPassing = percentage >= 70;
 
-                            {/* 3. Teacher Feedback */}
-                            <div>
-                                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                                    <MessageSquare className="w-5 h-5 text-pink-400" /> Teacher Feedback
-                                </h3>
-                                <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 relative">
-                                    <div className="absolute top-0 left-0 w-1 h-full bg-pink-500 rounded-l-xl"></div>
-                                    <p className="text-slate-300 italic">"Yassin has been doing an amazing job! He is very active in class and always eager to answer questions. He needs a little more practice with spelling, but overall his progress is fantastic."</p>
-                                    <p className="text-sm text-slate-500 mt-3 font-bold">- Ms. Sarah (Class Teacher)</p>
-                                </div>
-                            </div>
+                                                    return (
+                                                        <div key={result.id} className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
+                                                            <div>
+                                                                <p className="font-bold text-white">{result.assignments?.title || "Unknown Assignment"}</p>
+                                                                <p className="text-sm text-slate-400">
+                                                                    {result.assignments?.subject} • {new Date(result.created_at).toLocaleDateString()}
+                                                                </p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <span className={`font-bold text-lg ${isPassing ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                                                    {percentage}%
+                                                                </span>
+                                                                <p className="text-xs text-slate-500">Score: {result.score}/{result.max_score}</p>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
 
+                                    {/* 3. Real Teacher Feedback */}
+                                    <div>
+                                        <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                                            <MessageSquare className="w-5 h-5 text-pink-400" /> Teacher Feedback
+                                        </h3>
+
+                                        {/* Fetch the most recent feedback that isn't empty */}
+                                        {(() => {
+                                            const latestFeedback = gradeData?.results.find(r => r.teacher_feedback);
+                                            if (!latestFeedback) return (
+                                                <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 text-center text-slate-500">
+                                                    No written feedback from teachers yet.
+                                                </div>
+                                            );
+                                            return (
+                                                <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 relative">
+                                                    <div className="absolute top-0 left-0 w-1 h-full bg-pink-500 rounded-l-xl"></div>
+                                                    <p className="text-slate-300 italic">"{latestFeedback.teacher_feedback}"</p>
+                                                    <p className="text-sm text-slate-500 mt-3 font-bold">- Regarding: {latestFeedback.assignments?.title}</p>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
