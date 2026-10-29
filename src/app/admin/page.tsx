@@ -4,7 +4,8 @@ import UserActions from "./user-actions";
 import { approveChild } from "./actions";
 import AutoRefresh from "./auto-refresh";
 import UploadForm from "./UploadForm";
-import { ShieldAlert, Activity, ExternalLink, CheckCircle, Baby, BrainCircuit } from "lucide-react";
+import MeetingControl from "./MeetingControl";
+import { ShieldAlert, Activity, CheckCircle, Baby, BrainCircuit, Users, HardDrive } from "lucide-react";
 
 export default async function AdminPage() {
     const supabase = await createClient();
@@ -48,197 +49,194 @@ export default async function AdminPage() {
     if (error) return <div className="p-8 text-red-600">Error loading users: {error.message}</div>;
 
     return (
-        <main className="p-8 max-w-7xl mx-auto space-y-12 text-slate-900 bg-slate-50 min-h-screen">
-            <AutoRefresh /> {/* ⏱️ THE 5-SECOND LIVE REFRESH */}
+        <main className="min-h-screen bg-slate-950 text-slate-200 font-sans pb-24">
+            <AutoRefresh />
 
-            {/* 🚨 SECURITY PANEL */}
-            <section>
-                <h1 className="text-3xl font-extrabold flex items-center gap-3 mb-6">
-                    <ShieldAlert className="w-8 h-8 text-red-600" /> Live Security Threats
-                </h1>
-                {alerts && alerts.length > 0 ? (
-                    <div className="grid md:grid-cols-2 gap-4">
-                        {alerts.map((alert) => (
-                            <div key={alert.id} className="bg-red-50 border-2 border-red-200 p-5 rounded-xl shadow-sm flex flex-col justify-between">
-                                <div>
-                                    <span className="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full uppercase tracking-wider">{alert.alert_type}</span>
-                                    <p className="mt-3 font-medium text-red-900">{alert.message}</p>
-                                    <p className="text-sm text-red-700 mt-2 flex items-center gap-2">
-                                        <strong>Attacker IP:</strong>
-                                        <a href={`https://ipinfo.io/${alert.ip_address}`} target="_blank" rel="noreferrer" className="underline flex items-center gap-1 hover:text-red-900">
-                                            {alert.ip_address} <ExternalLink className="w-3 h-3" />
-                                        </a>
-                                    </p>
-                                </div>
-                                <form action={async () => {
-                                    "use server";
-                                    const supabase = await createClient();
-                                    await supabase.from("security_alerts").update({ is_resolved: true }).eq("id", alert.id);
-                                }}>
-                                    <button type="submit" className="mt-4 w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded-lg transition-colors">
-                                        Resolve Alert
-                                    </button>
-                                </form>
-                            </div>
-                        ))}
-                    </div>
-                ) : (
-                    <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-xl text-emerald-800 flex items-center gap-3">
-                        <ShieldAlert className="w-6 h-6" /> No active threats detected. The system is secure.
-                    </div>
-                )}
-            </section>
-
-            {/* 🤖 AI TEACHER OVERSIGHT */}
-            <section className="bg-indigo-50 border border-indigo-200 rounded-2xl p-6">
-                <h2 className="text-xl font-bold text-indigo-900 mb-4 flex items-center gap-2">
-                    <BrainCircuit className="w-6 h-6 text-indigo-600" /> AI Teacher Oversight Report
-                </h2>
-                <p className="text-sm text-indigo-700 mb-4">The AI monitors teacher behavior for quality assurance.</p>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                    {teacherLogs?.map(log => (
-                        <div key={log.id} className={`p-4 rounded-xl border-l-4 ${log.action === 'TEACHER_LEFT_APP' ? 'border-amber-500 bg-amber-50' : 'border-red-500 bg-red-50'}`}>
-                            <p className="font-bold text-slate-800">{log.tba_profiles?.full_name}</p>
-                            <p className="text-sm text-slate-600">
-                                {log.action === 'TEACHER_LEFT_APP'
-                                    ? "⚠️ Teacher switched tabs/left the app during an active session."
-                                    : "❌ Teacher graded an assignment without providing feedback."}
-                            </p>
-                            <p className="text-xs text-slate-400 mt-2">{new Date(log.created_at).toLocaleString()}</p>
+            {/* 🚀 HEADER */}
+            <div className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-xl sticky top-0 z-50">
+                <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-indigo-500/20 rounded-xl text-indigo-400"><ShieldAlert size={24} /></div>
+                        <div>
+                            <h1 className="text-xl font-bold text-white">Command Center</h1>
+                            <p className="text-xs text-slate-400">Admin Dashboard</p>
                         </div>
-                    ))}
-                    {(!teacherLogs || teacherLogs.length === 0) && (
-                        <p className="text-slate-500 text-sm italic">All teachers are performing optimally. No suspicious activity.</p>
-                    )}
+                    </div>
                 </div>
-            </section>
+            </div>
 
-            {/* 🎮 3D AVATAR UPLOADER */}
-            <section className="bg-white p-6 rounded-2xl border shadow-sm">
-                <h2 className="text-2xl font-bold mb-4">Upload 3D Character (GLB)</h2>
-                <p className="text-slate-500 mb-6 text-sm">Upload character models for students to buy. Our system scans the file signature to block malicious viruses.</p>
-                <UploadForm />
-            </section>
+            <div className="max-w-7xl mx-auto px-8 mt-8 space-y-8">
 
-            {/* 👶 PENDING STUDENT APPROVALS */}
-            <section>
-                <h2 className="text-2xl font-bold flex items-center gap-2 mb-4 text-amber-600">
-                    <Baby className="w-6 h-6" /> Pending Student Approvals
-                </h2>
-                <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
-                    {pendingChildren && pendingChildren.length > 0 ? (
-                        <table className="w-full text-left border-collapse">
-                            <thead className="bg-slate-50 border-b">
-                                <tr>
-                                    <th className="p-4 font-medium">Student Name</th>
-                                    <th className="p-4 font-medium">Class</th>
-                                    <th className="p-4 font-medium">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {pendingChildren.map((child) => (
-                                    <tr key={child.id} className="border-b last:border-0 hover:bg-slate-50">
-                                        <td className="p-4 font-medium">{child.full_name}</td>
-                                        <td className="p-4">{child.class_name}</td>
-                                        <td className="p-4">
-                                            <form action={approveChild}>
-                                                <input type="hidden" name="childId" value={child.id} />
-                                                <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
-                                                    <CheckCircle className="w-4 h-4" /> Approve Child
-                                                </button>
+                {/* 🚨 TOP ROW: SECURITY & LIVE MEETING */}
+                <div className="grid lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2 space-y-6">
+                        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
+                            <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-6">
+                                <ShieldAlert className="text-red-400" /> Live Security Threats
+                            </h2>
+                            {alerts && alerts.length > 0 ? (
+                                <div className="space-y-4">
+                                    {alerts.map((alert) => (
+                                        <div key={alert.id} className="bg-red-950/30 border border-red-900/50 p-4 rounded-2xl flex justify-between items-center">
+                                            <div>
+                                                <span className="bg-red-500/20 text-red-400 text-xs font-bold px-2 py-1 rounded-md uppercase tracking-wider">{alert.alert_type}</span>
+                                                <p className="mt-2 text-sm text-red-200 font-medium">{alert.message}</p>
+                                            </div>
+                                            <form action={async () => {
+                                                "use server";
+                                                const supabase = await createClient();
+                                                await supabase.from("security_alerts").update({ is_resolved: true }).eq("id", alert.id);
+                                            }}>
+                                                <button type="submit" className="bg-red-600 hover:bg-red-700 text-white text-sm font-bold py-2 px-4 rounded-xl transition-colors">Resolve</button>
                                             </form>
-                                        </td>
-                                    </tr>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="bg-emerald-950/30 border border-emerald-900/50 p-6 rounded-2xl text-emerald-400 flex items-center gap-3">
+                                    <CheckCircle className="w-6 h-6" /> System is secure. No active threats.
+                                </div>
+                            )}
+                        </div>
+
+                        {/* AI OVERSIGHT */}
+                        <div className="bg-indigo-950/30 border border-indigo-900/50 rounded-3xl p-6">
+                            <h2 className="text-lg font-bold text-indigo-300 flex items-center gap-2 mb-4">
+                                <BrainCircuit className="text-indigo-400" /> AI Teacher Oversight
+                            </h2>
+                            <div className="grid md:grid-cols-2 gap-4">
+                                {teacherLogs?.map(log => (
+                                    <div key={log.id} className={`p-4 rounded-2xl border ${log.action === 'TEACHER_LEFT_APP' ? 'border-amber-900/50 bg-amber-950/20' : 'border-red-900/50 bg-red-950/20'}`}>
+                                        <p className="font-bold text-white">{log.tba_profiles?.full_name}</p>
+                                        <p className="text-xs text-slate-400 mt-1">
+                                            {log.action === 'TEACHER_LEFT_APP' ? "⚠️ Left app during active session." : "❌ Graded without feedback."}
+                                        </p>
+                                    </div>
                                 ))}
-                            </tbody>
-                        </table>
+                                {(!teacherLogs || teacherLogs.length === 0) && (
+                                    <p className="text-slate-500 text-sm italic">All teachers are performing optimally.</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* RIGHT COLUMN: LIVE MEETING CONTROL */}
+                    <div className="space-y-6">
+                        <MeetingControl />
+
+                        {/* QUICK STATS */}
+                        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6">
+                            <h3 className="font-bold text-white mb-4 flex items-center gap-2"><Users className="text-emerald-400" /> User Stats</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                                    <p className="text-3xl font-extrabold text-white">{users?.length || 0}</p>
+                                    <p className="text-xs text-slate-400 uppercase tracking-wider mt-1">Total Users</p>
+                                </div>
+                                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                                    <p className="text-3xl font-extrabold text-amber-400">{pendingChildren?.length || 0}</p>
+                                    <p className="text-xs text-slate-400 uppercase tracking-wider mt-1">Pending Kids</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 👶 PENDING STUDENT APPROVALS */}
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6">
+                    <h2 className="text-lg font-bold text-amber-400 flex items-center gap-2 mb-4">
+                        <Baby /> Pending Approvals
+                    </h2>
+                    {pendingChildren && pendingChildren.length > 0 ? (
+                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {pendingChildren.map((child) => (
+                                <div key={child.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex justify-between items-center">
+                                    <div>
+                                        <p className="font-bold text-white">{child.full_name}</p>
+                                        <p className="text-xs text-slate-400">{child.class_name}</p>
+                                    </div>
+                                    <form action={approveChild}>
+                                        <input type="hidden" name="childId" value={child.id} />
+                                        <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-xl transition-colors">
+                                            <CheckCircle size={20} />
+                                        </button>
+                                    </form>
+                                </div>
+                            ))}
+                        </div>
                     ) : (
-                        <div className="p-6 text-slate-500 text-center">No pending approvals. All students are verified!</div>
+                        <p className="text-slate-500 text-sm">No pending approvals. All students verified!</p>
                     )}
                 </div>
-            </section>
 
-            {/* 🕵️ ACTIVITY FEED */}
-            <section>
-                <h2 className="text-2xl font-bold flex items-center gap-2 mb-4">
-                    <Activity className="w-6 h-6 text-emerald-600" /> Live System Activity
-                </h2>
-                <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
-                    <div className="max-h-[400px] overflow-y-auto">
+                {/* 🎮 UPLOADER & LOGS */}
+                <div className="grid lg:grid-cols-2 gap-6">
+                    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6">
+                        <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><HardDrive className="text-blue-400" /> 3D Model Uploader</h2>
+                        <UploadForm />
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 h-[500px] flex flex-col">
+                        <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-4"><Activity className="text-indigo-400" /> System Logs</h2>
+                        <div className="flex-1 overflow-y-auto pr-2 space-y-3">
+                            {logs?.map((log) => (
+                                <div key={log.id} className="flex items-start gap-3 text-sm p-3 rounded-xl bg-slate-950 border border-slate-800/50">
+                                    <span className={`mt-1 h-2 w-2 rounded-full shrink-0 ${log.action.includes('FAILED') ? 'bg-red-500' : 'bg-emerald-500'}`} />
+                                    <div>
+                                        <p className="text-slate-300"><strong className="text-white">{log.tba_profiles?.full_name || "System"}</strong> {log.action}</p>
+                                        <p className="text-xs text-slate-500">{new Date(log.created_at).toLocaleString()}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* 👥 USER MANAGEMENT */}
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 overflow-hidden">
+                    <h2 className="text-lg font-bold text-white mb-6">User Management</h2>
+                    <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
-                            <thead className="bg-slate-50 border-b sticky top-0 z-10">
+                            <thead className="border-b border-slate-800">
                                 <tr>
-                                    <th className="p-4 font-semibold text-slate-600">Time</th>
-                                    <th className="p-4 font-semibold text-slate-600">User</th>
-                                    <th className="p-4 font-semibold text-slate-600">Action</th>
-                                    <th className="p-4 font-semibold text-slate-600">IP Address</th>
+                                    <th className="p-4 font-semibold text-slate-400">Name</th>
+                                    <th className="p-4 font-semibold text-slate-400">Email</th>
+                                    <th className="p-4 font-semibold text-slate-400">Role</th>
+                                    <th className="p-4 font-semibold text-slate-400">Status</th>
+                                    <th className="p-4 font-semibold text-slate-400">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {logs?.map((log) => (
-                                    <tr key={log.id} className="border-b last:border-0 hover:bg-slate-50">
-                                        <td className="p-4 text-xs text-slate-500 whitespace-nowrap">{new Date(log.created_at).toLocaleString()}</td>
-                                        <td className="p-4 font-medium">{log.tba_profiles?.full_name || "Unknown/Login Attempt"}</td>
+                                {users?.map((u) => (
+                                    <tr key={u.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
+                                        <td className="p-4 font-medium text-white">{u.full_name || "—"}</td>
+                                        <td className="p-4 text-slate-400">{u.email}</td>
                                         <td className="p-4">
-                                            <span className={`px-2 py-1 rounded text-xs font-bold ${log.action.includes('FAILED') || log.action.includes('LEFT') ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
+                                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${u.role === 'admin' ? 'bg-purple-500/20 text-purple-400' :
+                                                    u.role === 'teacher' ? 'bg-blue-500/20 text-blue-400' :
+                                                        u.role === 'student' ? 'bg-amber-500/20 text-amber-400' :
+                                                            'bg-emerald-500/20 text-emerald-400'
                                                 }`}>
-                                                {log.action}
+                                                {u.role}
                                             </span>
                                         </td>
-                                        <td className="p-4 text-sm font-mono text-blue-600">{log.ip_address}</td>
+                                        <td className="p-4">
+                                            {u.is_banned ? <span className="text-red-400 font-bold bg-red-400/10 px-2 py-1 rounded">Banned</span> : <span className="text-emerald-400 font-medium">Active</span>}
+                                        </td>
+                                        <td className="p-4">
+                                            {u.id !== user.id ? (
+                                                <UserActions userId={u.id} currentRole={u.role} isBanned={u.is_banned || false} />
+                                            ) : (
+                                                <span className="text-xs text-slate-500 italic">You</span>
+                                            )}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
                 </div>
-            </section>
 
-            {/* 👥 USER MANAGEMENT */}
-            <section>
-                <h2 className="text-2xl font-bold mb-4">User Management</h2>
-                <div className="bg-white border rounded-xl overflow-hidden shadow-sm">
-                    <table className="w-full text-left border-collapse">
-                        <thead className="bg-slate-50 border-b">
-                            <tr>
-                                <th className="p-4 font-medium">Name</th>
-                                <th className="p-4 font-medium">Email</th>
-                                <th className="p-4 font-medium">Role</th>
-                                <th className="p-4 font-medium">Status</th>
-                                <th className="p-4 font-medium">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {users?.map((u) => (
-                                <tr key={u.id} className="border-b last:border-0 hover:bg-slate-50">
-                                    <td className="p-4">{u.full_name || "—"}</td>
-                                    <td className="p-4">{u.email}</td>
-                                    <td className="p-4">
-                                        <span className={`px-2 py-1 rounded text-xs font-bold ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' :
-                                                u.role === 'teacher' ? 'bg-blue-100 text-blue-700' :
-                                                    u.role === 'student' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                                            }`}>
-                                            {u.role}
-                                        </span>
-                                    </td>
-                                    <td className="p-4">
-                                        {u.is_banned ? <span className="text-red-600 font-bold">Banned</span> : <span className="text-emerald-600">Active</span>}
-                                    </td>
-                                    <td className="p-4">
-                                        {u.id !== user.id ? (
-                                            <UserActions userId={u.id} currentRole={u.role} isBanned={u.is_banned || false} />
-                                        ) : (
-                                            <span className="text-xs text-slate-400 italic">That's you</span>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
+            </div>
         </main>
     );
 }

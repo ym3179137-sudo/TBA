@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
 body {
-  background-color: #09090b;
-  color: #f4f4f5;
+  background-color: #020617;
+  /* slate-950 */
+  color: #f8fafc;
   margin: 0;
   padding: 0;
   overflow: hidden;
@@ -14,54 +15,45 @@ body {
 }
 
 /* =========================================
-   FORCE VIDEO TO NEVER CROP (The Fix)
+   🎥 INSANE LIVEKIT VIDEO FIX
    ========================================= */
-
-/* Target the video tag directly inside any tile */
 .lk-participant-tile video,
 [data-lk-participant-tile] video {
   object-fit: contain !important;
-  width: 84% !important;
-  height: 86% !important;
+  width: 100% !important;
+  /* Force full width */
+  height: 100% !important;
+  /* Force full height */
   background-color: #000000 !important;
 }
 
-/* Make sure the tile itself has a black background so the letterbox looks clean */
 .lk-participant-tile {
-  background-color: #000000 !important;
-  border-radius: 1rem !important;
+  background-color: #0f172a !important;
+  border-radius: 1.5rem !important;
   overflow: hidden !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
 }
 
-/* Participant Name Tag */
 .lk-participant-name {
-  background-color: rgba(0, 0, 0, 0.6) !important;
+  background: rgba(15, 23, 42, 0.8) !important;
+  backdrop-filter: blur(12px) !important;
   color: white !important;
-  padding: 4px 12px !important;
-  border-radius: 8px !important;
-  backdrop-filter: blur(8px) !important;
-  font-weight: 500 !important;
-  margin: 12px !important;
+  padding: 6px 16px !important;
+  border-radius: 999px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.05em !important;
   font-size: 0.75rem !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  margin: 16px !important;
   z-index: 10;
 }
 
 /* =========================================
-   Chat Sidebar Overrides
+   💬 INSANE CHAT UI
    ========================================= */
 .livekit-chat-container {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background-color: #09090b !important;
-}
-
-.livekit-chat-container .lk-chat {
-  background-color: transparent !important;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  border: none !important;
+  background-color: #020617 !important;
 }
 
 .livekit-chat-container .lk-chat-header {
@@ -69,114 +61,97 @@ body {
 }
 
 .livekit-chat-container .lk-chat-messages {
-  padding: 1rem !important;
+  padding: 1.5rem !important;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem !important;
-  overflow-y: auto;
-  flex: 1;
+  gap: 1rem !important;
 }
 
 .lk-chat-message .lk-message-body {
-  background-color: #27272a !important;
-  color: #e4e4e7 !important;
-  padding: 10px 14px !important;
-  border-radius: 12px !important;
-  border-bottom-left-radius: 2px !important;
-  font-size: 0.875rem !important;
-  line-height: 1.4 !important;
-  max-width: 85%;
-  word-wrap: break-word;
+  background: #1e293b !important;
+  /* slate-800 */
+  color: #e2e8f0 !important;
+  padding: 12px 18px !important;
+  border-radius: 1.25rem !important;
+  border-bottom-left-radius: 4px !important;
+  font-size: 0.9rem !important;
+  line-height: 1.5 !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
 }
 
 .lk-chat-message.lk-own-message .lk-message-body {
-  background-color: #4f46e5 !important;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%) !important;
+  /* Indigo to Purple */
   color: white !important;
   align-self: flex-end;
-  border-bottom-left-radius: 12px !important;
-  border-bottom-right-radius: 2px !important;
+  border-bottom-left-radius: 1.25rem !important;
+  border-bottom-right-radius: 4px !important;
 }
 
 .lk-chat-message .lk-participant-name {
-  color: #a1a1aa !important;
-  font-weight: 500 !important;
+  color: #94a3b8 !important;
+  font-weight: 600 !important;
   font-size: 0.75rem !important;
-  background: transparent !important;
-  padding: 0 !important;
-  margin: 0 0 4px 4px !important;
-  backdrop-filter: none !important;
+  margin: 0 0 6px 6px !important;
 }
 
 .livekit-chat-container .lk-chat-form {
-  border-top: 1px solid #27272a !important;
-  background-color: #09090b !important;
-  padding: 12px !important;
-  margin: 0 !important;
-  display: flex;
-  gap: 8px;
-  align-items: center;
+  border-top: 1px solid #1e293b !important;
+  background-color: #020617 !important;
+  padding: 16px !important;
 }
 
-.livekit-chat-container .lk-chat-form .lk-chat-entry,
-.livekit-chat-container .lk-chat-form input[type="text"],
 .livekit-chat-container input {
-  background-color: #18181b !important;
-  border: 1px solid #3f3f46 !important;
-  color: #f4f4f5 !important;
-  border-radius: 10px !important;
-  padding: 10px 14px !important;
-  font-size: 0.875rem !important;
-  flex: 1;
-  transition: border-color 0.2s;
-  box-shadow: none !important;
+  background: #0f172a !important;
+  border: 1px solid #334155 !important;
+  color: white !important;
+  border-radius: 12px !important;
+  padding: 12px 16px !important;
+  font-size: 0.9rem !important;
+  transition: all 0.2s;
 }
 
 .livekit-chat-container input:focus {
   border-color: #6366f1 !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
 }
 
-.livekit-chat-container input::placeholder {
-  color: #71717a !important;
-}
-
-.livekit-chat-container button[type="submit"],
-.livekit-chat-container .lk-chat-form-button {
-  background-color: #4f46e5 !important;
+.livekit-chat-container button[type="submit"] {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%) !important;
   color: white !important;
-  border: none !important;
-  border-radius: 10px !important;
-  padding: 10px 16px !important;
+  border-radius: 12px !important;
+  padding: 0 20px !important;
   font-weight: 600 !important;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.livekit-chat-container button[type="submit"]:hover,
-.livekit-chat-container .lk-chat-form-button:hover {
-  background-color: #4338ca !important;
 }
 
 /* =========================================
-   Control Bar Reset
+   🎛️ INSANE CONTROL BAR
    ========================================= */
 .lk-control-bar {
-  background-color: transparent !important;
-  border: none !important;
+  background: transparent !important;
   padding: 0 !important;
-  gap: 4px !important;
+  gap: 8px !important;
 }
 
 .lk-button {
-  background-color: #27272a !important;
-  color: #f4f4f5 !important;
-  border-radius: 10px !important;
+  background: #1e293b !important;
+  color: #f8fafc !important;
+  border-radius: 14px !important;
   transition: all 0.2s;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
 }
 
 .lk-button:hover {
-  background-color: #3f3f46 !important;
+  background: #334155 !important;
+  transform: translateY(-2px);
 }
 
 .lk-button[data-lk-active="true"] {
-  background-color: #4f46e5 !important;
+  background: #ef4444 !important;
+  border-color: #ef4444 !important;
+}
+
+.lk-disconnect-button {
+  background: #ef4444 !important;
+  border-radius: 14px !important;
 }
