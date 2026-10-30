@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Flame, Clock, Shield, Sparkles, EyeOff, Gift, Skull, Crown } from "lucide-react";
+import { Flame, Clock, Shield, Sparkles, EyeOff, Gift, X } from "lucide-react";
 
 export default function TBAArena({
     gameData,
@@ -9,6 +9,7 @@ export default function TBAArena({
     onScoreUpdate,
     onTakeGold,
     onDragonTreasure,
+    onGameEnd,
     isPreview = false
 }: {
     gameData: any,
@@ -16,6 +17,7 @@ export default function TBAArena({
     onScoreUpdate?: (score: number) => void,
     onTakeGold?: (percent: number, currentScore: number) => Promise<number>,
     onDragonTreasure?: (currentScore: number) => Promise<number>,
+    onGameEnd?: (answersLog: any[]) => void,
     isPreview?: boolean
 }) {
     const [currentQ, setCurrentQ] = useState(0);
@@ -23,19 +25,25 @@ export default function TBAArena({
     const [streak, setStreak] = useState(0);
     const [timeLeft, setTimeLeft] = useState(15);
 
+    // Logs
+    const [answersLog, setAnswersLog] = useState<any[]>([]);
+
     // Abilities
     const [abilities, setAbilities] = useState({ timeFreeze: 1, doublePoints: 1, shield: 1 });
     const [activeEffect, setActiveEffect] = useState<string | null>(null);
-    const [glitchScreen, setGlitchScreen] = useState(false);
 
-    // Chest Logic
+    // States
+    const [isTabHidden, setIsTabHidden] = useState(false);
     const [showChests, setShowChests] = useState(false);
-    const [chestResult, setChestResult] = useState<any>(null);
+
+    // 🚨 Red X Logic
+    const [showWrongScreen, setShowWrongScreen] = useState(false);
+    const [canClickContinue, setCanClickContinue] = useState(false);
+
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const wrongTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Anti-Cheat
-    const [isTabHidden, setIsTabHidden] = useState(false);
-    const timerRef = useRef<NodeJS.Timeout | null>(null);
-
     useEffect(() => {
         if (isPreview) return;
         const handleVisibilityChange = () => setIsTabHidden(document.hidden);
@@ -50,7 +58,7 @@ export default function TBAArena({
 
     // Timer
     useEffect(() => {
-        if (!gameData || isTabHidden || showChests) return; // Pause timer if choosing chest
+        if (!gameData || isTabHidden || showChests || showWrongScreen) return;
         setTimeLeft(15);
         if (timerRef.current) clearInterval(timerRef.current);
         timerRef.current = setInterval(() => {
@@ -64,13 +72,13 @@ export default function TBAArena({
             });
         }, 1000);
         return () => { if (timerRef.current) clearInterval(timerRef.current); };
-    }, [currentQ, gameData, isTabHidden, showChests]);
+    }, [currentQ, gameData, isTabHidden, showChests, showWrongScreen]);
 
     if (!gameData || !gameData.questions) return null;
     const question = gameData.questions[currentQ];
 
     function useAbility(type: "timeFreeze" | "doublePoints" | "shield") {
-        if (abilities[type] <= 0 || isTabHidden || showChests) return;
+        if (abilities[type] <= 0 || isTabHidden || showChests || showWrongScreen) return;
         setAbilities(prev => ({ ...prev, [type]: prev[type] - 1 }));
         if (type === 'timeFreeze') { setTimeLeft(prev => prev + 10); setActiveEffect("TIME FROZEN! +10s"); }
         if (type === 'doublePoints') setActiveEffect("2x POINTS ACTIVE!");
@@ -79,11 +87,20 @@ export default function TBAArena({
     }
 
     async function handleAnswer(option: string | null) {
-        if (isTabHidden || showChests) return;
+        if (isTabHidden || showChests || showWrongScreen) return;
         if (timerRef.current) clearInterval(timerRef.current);
 
         const isCorrect = option === question.correctAnswer;
         let points = 10;
+
+        // Log the answer
+        const logEntry = {
+            question: question.prompt,
+            correctAnswer: question.correctAnswer,
+            studentAnswer: option || "Time Out",
+            isCorrect: isCorrect
+        };
+        setAnswersLog(prev => [...prev, logEntry]);
 
         if (isCorrect) {
             let newStreak = streak + 1;
@@ -95,25 +112,36 @@ export default function TBAArena({
             setScore(newScore);
             if (onScoreUpdate) onScoreUpdate(newScore);
 
-            // 🚨 Trigger Chests in Gold Quest
             if (gameMode === 'gold_quest') {
                 setShowChests(true);
-                return; // Wait for chest selection before moving to next Q
+                return;
             }
+            moveToNextQuestion();
         } else {
-            if (activeEffect !== "SHIELD ACTIVE!") setStreak(0);
-            if (gameMode === 'hacker') {
-                setGlitchScreen(true);
-                setTimeout(() => setGlitchScreen(false), 1000);
-            }
-        }
+            // 🚨 WRONG ANSWER LOGIC
+            setStreak(0);
+            setShowWrongScreen(true);
+            setCanClickContinue(false);
 
-        // Move to next question
+            // Wait 3 seconds before allowing click
+            wrongTimeoutRef.current = setTimeout(() => {
+                setCanClickContinue(true);
+            }, 3000);
+        }
+    }
+
+    function moveToNextQuestion() {
         const nextQ = (currentQ + 1) % gameData.questions.length;
         setCurrentQ(nextQ);
     }
 
-    // 🚨 Chest Logic
+    function handleContinueClick() {
+        if (!canClickContinue) return;
+        setShowWrongScreen(false);
+        if (wrongTimeoutRef.current) clearTimeout(wrongTimeoutRef.current);
+        moveToNextQuestion();
+    }
+
     async function openChest(chestIndex: number) {
         setShowChests(false);
         const roll = Math.random();
@@ -121,54 +149,66 @@ export default function TBAArena({
         let newScore = score;
 
         if (roll < 0.1) {
-            // Dragon's Treasure
             if (onDragonTreasure) newScore = await onDragonTreasure(score);
             resultText = "DRAGON'S TREASURE!";
-            setActiveEffect(resultText);
         } else if (roll < 0.25) {
-            // Take %
             const percent = Math.random() > 0.5 ? 25 : 10;
             if (onTakeGold) newScore = await onTakeGold(percent, score);
             resultText = `STOLE ${percent}% OF 1ST PLACE!`;
-            setActiveEffect(resultText);
         } else if (roll < 0.5) {
-            // Swamp
             const loss = Math.floor(score * 0.25);
             newScore = Math.max(0, score - loss);
             resultText = `SWAMP! -${loss} PTS`;
-            setActiveEffect(resultText);
         } else if (roll < 0.7) {
-            // Double
             newScore = score * 2;
             resultText = "DOUBLE GOLD!";
-            setActiveEffect(resultText);
         } else {
-            // Gold
             const bonus = Math.floor(Math.random() * 50) + 50;
             newScore = score + bonus;
             resultText = `+${bonus} GOLD!`;
-            setActiveEffect(resultText);
         }
 
         setScore(newScore);
         if (onScoreUpdate) onScoreUpdate(newScore);
-        setChestResult(resultText);
+        setActiveEffect(resultText);
 
         setTimeout(() => {
             setActiveEffect(null);
-            setChestResult(null);
-            const nextQ = (currentQ + 1) % gameData.questions.length;
-            setCurrentQ(nextQ);
+            moveToNextQuestion();
         }, 2500);
     }
 
+    // Handle global game end (from parent polling)
+    useEffect(() => {
+        // If game ends, send the answers log up
+        return () => {
+            if (onGameEnd) onGameEnd(answersLog);
+        }
+    }, [answersLog, onGameEnd]);
+
     return (
-        <div className={`flex flex-col h-full bg-slate-950 text-white p-6 relative overflow-hidden transition-all duration-300 ${glitchScreen ? 'invert hue-rotate-90 scale-105' : ''}`}>
+        <div className={`flex flex-col h-full bg-slate-950 text-white p-6 relative overflow-hidden transition-all duration-300`}>
 
             {isTabHidden && (
                 <div className="absolute inset-0 z-[100] bg-red-600/95 flex flex-col items-center justify-center p-8 text-center backdrop-blur-md">
                     <EyeOff className="w-24 h-24 text-white mb-6 animate-pulse" />
                     <h1 className="text-5xl font-black text-white mb-4">DON'T LEAVE THE GAME!</h1>
+                </div>
+            )}
+
+            {/* 🚨 RED X WRONG SCREEN */}
+            {showWrongScreen && (
+                <div
+                    onClick={handleContinueClick}
+                    className={`absolute inset-0 z-[80] flex flex-col items-center justify-center bg-red-600 transition-all duration-300 ${canClickContinue ? 'cursor-pointer' : 'cursor-default'}`}
+                >
+                    <X className="w-48 h-48 text-white mb-8 animate-in zoom-in spin-in-12 duration-500" strokeWidth={4} />
+                    <h1 className="text-4xl font-black text-white mb-4">INCORRECT!</h1>
+                    {canClickContinue ? (
+                        <p className="text-xl font-bold text-white animate-pulse bg-black/20 px-6 py-3 rounded-xl">Click anywhere to continue</p>
+                    ) : (
+                        <p className="text-xl font-bold text-white/50">Wait a moment...</p>
+                    )}
                 </div>
             )}
 

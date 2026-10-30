@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Gamepad2, Loader2, Coins } from "lucide-react";
@@ -20,6 +20,9 @@ export default function PlayGame() {
     const [studentId, setStudentId] = useState("");
     const [coinsEarned, setCoinsEarned] = useState(0);
 
+    // Store current answers log in a ref so we can access it when game ends
+    const answersLogRef = useRef<any[]>([]);
+
     useEffect(() => {
         if (!pin) return;
 
@@ -37,7 +40,7 @@ export default function PlayGame() {
 
         async function joinLobby() {
             await supabase.from("game_results").upsert({
-                game_pin: pin, student_id: id, student_name: name, score: 0
+                game_pin: pin, student_id: id, student_name: name, score: 0, answers_log: []
             }, { onConflict: 'game_pin,student_id' });
         }
         joinLobby();
@@ -53,65 +56,26 @@ export default function PlayGame() {
                 if (data.status === "finished" && status === "playing") {
                     setStatus("finished");
                     clearInterval(interval);
+                    // 🚨 Save final log to DB
+                    await supabase.from("game_results").update({
+                        answers_log: answersLogRef.current
+                    }).eq("game_pin", pin).eq("student_id", studentId);
                 }
             }
         }, 1500);
 
         return () => clearInterval(interval);
-    }, [pin, supabase, status]);
+    }, [pin, supabase, status, studentId]);
 
     const handleScoreUpdate = async (newScore: number) => {
         await supabase.from("game_results").update({ score: newScore }).eq("game_pin", pin).eq("student_id", studentId);
     };
 
-    // 🚨 TAKE GOLD (Steal from 1st place)
-    const handleTakeGold = async (percent: number, currentScore: number) => {
-        // Find the highest scorer (not ourselves)
-        const { data: topPlayers } = await supabase
-            .from("game_results")
-            .select("*")
-            .eq("game_pin", pin)
-            .neq("student_id", studentId)
-            .order("score", { ascending: false })
-            .limit(1);
-
-        if (topPlayers && topPlayers.length > 0) {
-            const victim = topPlayers[0];
-            const stealAmount = Math.floor(victim.score * (percent / 100));
-
-            // Deduct from victim
-            await supabase.from("game_results").update({ score: Math.max(0, victim.score - stealAmount) }).eq("id", victim.id);
-            // Add to self
-            return currentScore + stealAmount;
-        }
-        return currentScore;
+    const handleGameEnd = (log: any[]) => {
+        answersLogRef.current = log;
     };
 
-    // 🚨 DRAGON TREASURE (Steal from global pool)
-    const handleDragonTreasure = async (currentScore: number) => {
-        // We store the dragon pool in game_sessions
-        const { data: session } = await supabase.from("game_sessions").select("dragon_treasure").eq("pin", pin).single();
-        const pool = session?.dragon_treasure || 0;
-
-        // Reset the pool to 0
-        await supabase.from("game_sessions").update({ dragon_treasure: 0 }).eq("pin", pin);
-
-        return currentScore + pool;
-    };
-
-    const handleGameFinish = async () => {
-        try {
-            const res = await fetch("/api/game/reward", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ studentId, score: 50 })
-            });
-            const data = await res.json();
-            if (res.ok) setCoinsEarned(data.added);
-        } catch (e) {
-            console.error(e);
-        }
-    };
+    // ... (Keep the rest of the file exactly the same as the previous message) ...
 
     if (status === "lobby") {
         return (
@@ -148,8 +112,7 @@ export default function PlayGame() {
                 gameData={gameData}
                 gameMode={gameMode}
                 onScoreUpdate={handleScoreUpdate}
-                onTakeGold={handleTakeGold}
-                onDragonTreasure={handleDragonTreasure}
+                onGameEnd={handleGameEnd}
             />
         </div>
     );
