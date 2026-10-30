@@ -24,20 +24,26 @@ export default function PlayGame({ params }: { params: { pin: string } }) {
             if (parts.length === 2) return parts.pop()?.split(';').shift();
             return "";
         };
+        // Fallback to a guest ID if they aren't logged in
         const id = getCookie("student_id") || `guest-${Math.random().toString(36).slice(2, 6)}`;
-        const name = decodeURIComponent(getCookie("student_name") || "Player");
+        const name = decodeURIComponent(getCookie("student_name") || "Guest Player");
 
         setStudentId(id);
         setStudentName(name);
 
         // 🚨 1. Join Lobby in DB
         async function joinLobby() {
-            await supabase.from("game_results").upsert({
+            const { error } = await supabase.from("game_results").upsert({
                 game_pin: params.pin,
                 student_id: id,
                 student_name: name,
-                score: 0 // Default score for lobby
+                score: 0
             }, { onConflict: 'game_pin,student_id' });
+
+            if (error) {
+                console.error("Failed to join lobby:", error);
+                alert("Error joining game: " + error.message);
+            }
         }
         joinLobby();
 
@@ -61,10 +67,8 @@ export default function PlayGame({ params }: { params: { pin: string } }) {
 
     const handleGameFinish = async (finalScore: number) => {
         try {
-            // Update DB with final score
             await supabase.from("game_results").update({ score: finalScore }).eq("game_pin", params.pin).eq("student_id", studentId);
 
-            // Give coins
             const res = await fetch("/api/game/reward", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
