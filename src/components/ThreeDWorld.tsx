@@ -6,21 +6,19 @@ import { OrbitControls, Environment, ContactShadows, useGLTF, Html } from "@reac
 import * as THREE from "three";
 import { Coins, Palette, Shirt, CheckCircle, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { purchaseSkin } from "@/app/actions/purchase";
+import { purchaseSkin, equipSkin } from "@/app/actions/purchase"; // 🚨 Import equipSkin
 
-// 🚨 1. Nicer 3D Loading Spinner (Replaces the ugly pink box)
 function LoadingFallback() {
     return (
         <Html center>
             <div className="flex flex-col items-center justify-center bg-slate-900/90 p-6 rounded-2xl border border-slate-700 shadow-2xl backdrop-blur-md">
                 <Loader2 className="w-10 h-10 text-indigo-400 animate-spin mb-3" />
-                <p className="text-white font-bold whitespace-nowrap text-sm">Loading Character...</p>
+                <p className="text-white font-bold whitespace-nowrap">Loading Character...</p>
             </div>
         </Html>
     );
 }
 
-// 🚨 2. Error Boundary (If GitHub model is completely broken or fails to download)
 class ModelErrorBoundary extends React.Component<{ fallback: React.ReactNode, children: React.ReactNode }, { hasError: boolean }> {
     constructor(props: any) {
         super(props);
@@ -81,11 +79,7 @@ export default function AvatarStudio({
     const [equippedSkin, setEquippedSkin] = useState(safeInitialSkin);
     const [hasHat, setHasHat] = useState(false);
     const [loading, setLoading] = useState(true);
-
-    const supabase = createClient();
-
-    // 🚨 3. PRELOAD the equipped skin instantly so it loads faster!
-    useGLTF.preload(safeInitialSkin);
+    const [isEquipping, setIsEquipping] = useState(false); // 🚨 Track loading state
 
     useEffect(() => {
         async function fetchStore() {
@@ -105,15 +99,27 @@ export default function AvatarStudio({
         fetchStore();
     }, []);
 
-    const handlePurchase = async (item: any) => {
+    useGLTF.preload(equippedSkin);
+
+    const handlePurchaseOrEquip = async (item: any) => {
+        // 🚨 If already owned, EQUIP securely
         if (unlockedSkins.includes(item.model_url)) {
-            setEquippedSkin(item.model_url);
-            await supabase.from("children").update({ equipped_skin: item.model_url }).eq("id", studentId);
+            setIsEquipping(true);
+            setEquippedSkin(item.model_url); // Optimistic UI update
+            try {
+                await equipSkin(studentId, item.model_url); // Call Server Action
+            } catch (err: any) {
+                alert(err.message);
+            } finally {
+                setIsEquipping(false);
+            }
             return;
         }
 
+        // If not owned, PURCHASE securely
         if (coins < item.price) return alert("Not enough coins!");
 
+        setIsEquipping(true);
         try {
             const res = await purchaseSkin(studentId, item.id, item.price, item.model_url);
             if (res.success) {
@@ -123,6 +129,8 @@ export default function AvatarStudio({
             }
         } catch (err: any) {
             alert(err.message);
+        } finally {
+            setIsEquipping(false);
         }
     };
 
@@ -137,14 +145,12 @@ export default function AvatarStudio({
                     <Coins className="text-yellow-400" /> {coins}
                 </div>
 
-                {/* 🚨 Performance optimization: dpr={[1, 2]} */}
                 <Canvas shadows camera={{ position: [0, 2, 6], fov: 45 }} dpr={[1, 2]}>
                     <ambientLight intensity={0.5} />
                     <directionalLight position={[5, 10, 5]} intensity={1.5} castShadow />
                     <Environment preset="city" />
 
                     <ModelErrorBoundary fallback={<LoadingFallback />}>
-                        {/* 🚨 Replaced pink box with the new LoadingFallback spinner */}
                         <Suspense fallback={<LoadingFallback />}>
                             <GLBAvatar modelUrl={equippedSkin} hat={hasHat} />
                         </Suspense>
@@ -171,8 +177,9 @@ export default function AvatarStudio({
                             return (
                                 <button
                                     key={item.id}
-                                    onClick={() => handlePurchase(item)}
-                                    className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${isEquipped ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}
+                                    onClick={() => handlePurchaseOrEquip(item)}
+                                    disabled={isEquipping}
+                                    className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${isEquipped ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'} ${isEquipping ? 'opacity-50' : ''}`}
                                 >
                                     <div className="flex items-center gap-3">
                                         <Shirt className={isEquipped ? "text-emerald-500" : "text-slate-400"} />
