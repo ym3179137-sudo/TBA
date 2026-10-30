@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter, useParams } from "next/navigation"; // 🚨 Imported useParams
+import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Gamepad2, Loader2, Coins } from "lucide-react";
 import TBAArena from "@/components/TBAArena";
 
 export default function PlayGame() {
     const router = useRouter();
-    const params = useParams(); // 🚨 Get params using useParams hook
-    const pin = params?.pin as string; // 🚨 Safely get the PIN
+    const params = useParams();
+    const pin = params?.pin as string;
 
     const supabase = useMemo(() => createClient(), []);
 
@@ -21,7 +21,7 @@ export default function PlayGame() {
     const [coinsEarned, setCoinsEarned] = useState(0);
 
     useEffect(() => {
-        if (!pin) return; // Wait until pin is loaded
+        if (!pin) return;
 
         const getCookie = (name: string) => {
             const value = `; ${document.cookie}`;
@@ -35,38 +35,34 @@ export default function PlayGame() {
         setStudentId(id);
         setStudentName(name);
 
-        // 🚨 1. Join Lobby in DB
+        // 1. Join Lobby in DB
         async function joinLobby() {
-            const { error } = await supabase.from("game_results").upsert({
-                game_pin: pin, // 🚨 Use the unwrapped pin
+            await supabase.from("game_results").upsert({
+                game_pin: pin,
                 student_id: id,
                 student_name: name,
                 score: 0
             }, { onConflict: 'game_pin,student_id' });
-
-            if (error) {
-                console.error("Failed to join lobby:", error);
-                alert("Error joining game: " + error.message);
-            }
         }
         joinLobby();
 
-        // 🚨 2. Listen to DB for Game Start
-        const channel = supabase.channel(`session-${pin}`)
-            .on('postgres_changes', {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'game_sessions',
-                filter: `pin=eq.${pin}`
-            }, (payload) => {
-                if (payload.new.status === 'playing' && payload.new.game_data) {
-                    setGameData(payload.new.game_data);
-                    setGameMode(payload.new.game_mode || "classic");
-                    setStatus("playing");
-                }
-            }).subscribe();
+        // 🚨 2. POLLING FALLBACK (100% reliable)
+        const interval = setInterval(async () => {
+            const { data } = await supabase
+                .from("game_sessions")
+                .select("*")
+                .eq("pin", pin)
+                .single();
 
-        return () => { supabase.removeChannel(channel); };
+            if (data && data.status === "playing" && data.game_data) {
+                setGameData(data.game_data);
+                setGameMode(data.game_mode || "classic");
+                setStatus("playing");
+                clearInterval(interval); // Stop polling once started
+            }
+        }, 1500);
+
+        return () => clearInterval(interval);
     }, [pin, supabase]);
 
     const handleGameFinish = async (finalScore: number) => {

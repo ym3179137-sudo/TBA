@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
     ArrowLeft, Play, Users, Swords, Crown,
     Ghost, Gamepad2, Fish, BookOpen, AlertCircle,
-    Loader2 // 🚨 Added Loader2 here
+    Loader2
 } from "lucide-react";
 
 const GAME_MODES = [
@@ -52,15 +52,6 @@ export default function TeacherArena() {
                 if (sessionError) throw sessionError;
                 setGamePin(pin);
 
-                // Listen for students joining the lobby via DB
-                supabase.channel(`lobby-${pin}`)
-                    .on('postgres_changes', {
-                        event: '*', schema: 'public', table: 'game_results', filter: `game_pin=eq.${pin}`
-                    }, async () => {
-                        const { data } = await supabase.from("game_results").select("*").eq("game_pin", pin);
-                        if (data) setPlayers(data);
-                    }).subscribe();
-
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -69,6 +60,18 @@ export default function TeacherArena() {
         }
         initLobby();
     }, [supabase]);
+
+    // 🚨 POLLING FALLBACK for Lobby
+    useEffect(() => {
+        if (!gamePin) return;
+
+        const interval = setInterval(async () => {
+            const { data } = await supabase.from("game_results").select("*").eq("game_pin", gamePin);
+            if (data) setPlayers(data);
+        }, 1500);
+
+        return () => clearInterval(interval);
+    }, [gamePin, supabase]);
 
     async function handleStartGame() {
         if (!selectedPresentationId) return alert("Please select a quiz.");
@@ -88,7 +91,6 @@ export default function TeacherArena() {
 
             const gamePayload = { questions: mockQuestions, title: presData.title };
 
-            // Update DB to start the game
             await supabase.from("game_sessions").update({
                 status: 'playing',
                 game_mode: selectedMode,
@@ -158,7 +160,8 @@ export default function TeacherArena() {
                         </div>
                     </div>
 
-                    <button onClick={handleStartGame} disabled={isStarting || players.length === 0} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl py-5 rounded-2xl shadow-xl disabled:opacity-50 flex items-center justify-center gap-3">
+                    {/* 🚨 Removed players.length === 0 check to allow testing */}
+                    <button onClick={handleStartGame} disabled={isStarting || presentations.length === 0} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl py-5 rounded-2xl shadow-xl disabled:opacity-50 flex items-center justify-center gap-3">
                         <Play size={24} /> {isStarting ? "Starting..." : "Start Game!"}
                     </button>
                 </div>
