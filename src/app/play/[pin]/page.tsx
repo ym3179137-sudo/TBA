@@ -35,56 +35,49 @@ export default function PlayGame() {
         setStudentId(id);
         setStudentName(name);
 
-        // 🚨 1. Join Lobby in DB
+        // Join Lobby
         async function joinLobby() {
-            const { error } = await supabase.from("game_results").upsert({
-                game_pin: pin,
-                student_id: id,
-                student_name: name,
-                score: 0
+            await supabase.from("game_results").upsert({
+                game_pin: pin, student_id: id, student_name: name, score: 0
             }, { onConflict: 'game_pin,student_id' });
-
-            if (error) {
-                console.error("Failed to join lobby:", error);
-                alert("Error joining game: " + error.message);
-            }
         }
         joinLobby();
 
-        // 🚨 2. POLLING FALLBACK
+        // Polling for Game Start & Game End
         const interval = setInterval(async () => {
-            const { data } = await supabase
-                .from("game_sessions")
-                .select("*")
-                .eq("pin", pin)
-                .single();
-
-            if (data && data.status === "playing" && data.game_data) {
-                setGameData(data.game_data);
-                setGameMode(data.game_mode || "classic");
-                setStatus("playing");
-                clearInterval(interval);
+            const { data } = await supabase.from("game_sessions").select("*").eq("pin", pin).single();
+            if (data) {
+                if (data.status === "playing" && data.game_data && status === "lobby") {
+                    setGameData(data.game_data);
+                    setGameMode(data.game_mode || "classic");
+                    setStatus("playing");
+                }
+                if (data.status === "finished" && status === "playing") {
+                    setStatus("finished");
+                    clearInterval(interval);
+                }
             }
         }, 1500);
 
         return () => clearInterval(interval);
-    }, [pin, supabase]);
+    }, [pin, supabase, status]);
 
-    const handleGameFinish = async (finalScore: number) => {
+    // 🚨 Updates DB every time they get a point
+    const handleScoreUpdate = async (newScore: number) => {
+        await supabase.from("game_results").update({ score: newScore }).eq("game_pin", pin).eq("student_id", studentId);
+    };
+
+    const handleGameFinish = async () => {
         try {
-            await supabase.from("game_results").update({ score: finalScore }).eq("game_pin", pin).eq("student_id", studentId);
-
             const res = await fetch("/api/game/reward", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ studentId, score: finalScore })
+                body: JSON.stringify({ studentId, score: 50 }) // Placeholder score for reward API
             });
             const data = await res.json();
             if (res.ok) setCoinsEarned(data.added);
         } catch (e) {
             console.error(e);
-        } finally {
-            setStatus("finished");
         }
     };
 
@@ -96,7 +89,6 @@ export default function PlayGame() {
                     <Gamepad2 className="w-24 h-24 text-emerald-400 mx-auto mb-6 animate-bounce" />
                     <h1 className="text-4xl font-black mb-2">{studentName}</h1>
                     <p className="text-xl text-slate-400 font-bold mb-8">You're in!</p>
-
                     <div className="flex items-center justify-center gap-3 text-emerald-400 font-bold bg-emerald-500/10 p-4 rounded-xl">
                         <Loader2 className="animate-spin" /> Waiting for teacher to start...
                     </div>
@@ -112,10 +104,6 @@ export default function PlayGame() {
                     <Coins className="w-24 h-24 text-amber-400 mx-auto mb-6 animate-bounce" />
                     <h1 className="text-4xl font-black mb-2">Game Over!</h1>
                     <p className="text-xl text-slate-400 font-bold mb-8">Great job, {studentName}!</p>
-                    <div className="bg-amber-500/10 border border-amber-500/30 p-6 rounded-2xl mb-8">
-                        <p className="text-sm font-bold text-amber-400 uppercase tracking-wider mb-1">Coins Earned</p>
-                        <p className="text-5xl font-black text-white">+{coinsEarned} 🪙</p>
-                    </div>
                     <button onClick={() => router.push("/student")} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl transition-all">Back to Dashboard</button>
                 </div>
             </div>
@@ -124,7 +112,7 @@ export default function PlayGame() {
 
     return (
         <div className="h-screen w-screen overflow-hidden">
-            <TBAArena gameData={gameData} gameMode={gameMode} onFinish={handleGameFinish} />
+            <TBAArena gameData={gameData} gameMode={gameMode} onScoreUpdate={handleScoreUpdate} />
         </div>
     );
 }
