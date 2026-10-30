@@ -30,6 +30,7 @@ export default function TeacherLivePresenter() {
     const [showEndModal, setShowEndModal] = useState(false);
     const [excusedIds, setExcusedIds] = useState<string[]>([]);
 
+    // Sizing
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
@@ -43,6 +44,7 @@ export default function TeacherLivePresenter() {
         return () => window.removeEventListener('resize', updateSize);
     }, [loading]);
 
+    // Laser fading
     const laserPoints = useRef<{ x: number; y: number; life: number }[]>([]);
     useEffect(() => {
         let animationFrameId: number;
@@ -128,12 +130,15 @@ export default function TeacherLivePresenter() {
         const target = Math.max(0, Math.min(newSlide, maxSlides - 1));
 
         setCurrentSlide(target);
-        clearCanvas();
 
-        // 1. Update DB first (Guaranteed sync)
+        // 1. Clear the local canvas
+        const ctx = canvasRef.current?.getContext('2d');
+        if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+
+        // 2. Update DB
         if (sessionId) await supabase.from("live_sessions").update({ current_slide: target }).eq("id", sessionId);
 
-        // 2. Broadcast to WebSocket (Instant UI update)
+        // 3. Broadcast to student to change slide AND clear their canvas
         channelRef.current?.send({
             type: 'broadcast',
             event: 'slide_change',
@@ -215,7 +220,6 @@ export default function TeacherLivePresenter() {
 
     const endLiveSession = async () => {
         if (!sessionId) return;
-
         const presentIds = attendance.map((a: any) => a.key);
         const records = allStudents.map(s => ({
             session_id: sessionId,
@@ -224,7 +228,6 @@ export default function TeacherLivePresenter() {
             is_present: presentIds.includes(s.id),
             is_excused: excusedIds.includes(s.id)
         }));
-
         await supabase.from("live_attendance").insert(records);
         await supabase.from("live_sessions").update({ is_active: false }).eq("id", sessionId);
         router.push("/teacher/library");
@@ -245,6 +248,7 @@ export default function TeacherLivePresenter() {
                 </div>
 
                 <div className="flex items-center gap-4">
+                    {/* Controls */}
                     {!presentation.file_url && presentation.deck_data?.slides && (
                         <div className="flex gap-2 bg-black/30 p-2 rounded-xl">
                             <button onClick={() => handleSlideChange(currentSlide - 1)} disabled={currentSlide === 0} className="p-2 rounded-lg hover:bg-white/20 disabled:opacity-30"><ArrowLeft size={20} /></button>
@@ -290,6 +294,7 @@ export default function TeacherLivePresenter() {
                 <canvas ref={laserCanvasRef} className="absolute inset-0 z-50 pointer-events-none" />
             </div>
 
+            {/* END MODAL */}
             {showEndModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
                     <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-3xl shadow-2xl p-8">
@@ -332,12 +337,8 @@ export default function TeacherLivePresenter() {
                         </div>
 
                         <div className="flex justify-end gap-3">
-                            <button onClick={() => setShowEndModal(false)} className="px-6 py-3 rounded-xl font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
-                                Cancel
-                            </button>
-                            <button onClick={endLiveSession} className="bg-red-600 hover:bg-red-500 text-white font-bold px-8 py-3 rounded-xl shadow-lg transition-all">
-                                End & Save
-                            </button>
+                            <button onClick={() => setShowEndModal(false)} className="px-6 py-3 rounded-xl font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-all">Cancel</button>
+                            <button onClick={endLiveSession} className="bg-red-600 hover:bg-red-500 text-white font-bold px-8 py-3 rounded-xl shadow-lg transition-all">End & Save</button>
                         </div>
                     </div>
                 </div>

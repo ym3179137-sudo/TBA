@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Gamepad2, Loader2, Coins, AlertCircle } from "lucide-react";
+import { Gamepad2, Loader2, Coins } from "lucide-react";
 import TBAArena from "@/components/TBAArena";
 
 export default function PlayGame({ params }: { params: { pin: string } }) {
@@ -16,59 +16,55 @@ export default function PlayGame({ params }: { params: { pin: string } }) {
     const [studentName, setStudentName] = useState("");
     const [studentId, setStudentId] = useState("");
     const [coinsEarned, setCoinsEarned] = useState(0);
-    const [error, setError] = useState<string | null>(null);
-
-    const channelRef = useRef<any>(null);
 
     useEffect(() => {
-        try {
-            const getCookie = (name: string) => {
-                const value = `; ${document.cookie}`;
-                const parts = value.split(`; ${name}=`);
-                if (parts.length === 2) return parts.pop()?.split(';').shift();
-                return "";
-            };
-            const id = getCookie("student_id") || `guest-${Math.random().toString(36).slice(2, 6)}`;
-            const name = decodeURIComponent(getCookie("student_name") || "Player");
-
-            setStudentId(id);
-            setStudentName(name);
-
-            channelRef.current = supabase.channel(`game-lobby-${params.pin}`, {
-                config: { presence: { key: id } }
-            });
-
-            channelRef.current
-                .on('broadcast', { event: 'start_game' }, (payload: any) => {
-                    if (payload.payload?.gameData) {
-                        setGameData(payload.payload.gameData);
-                        setGameMode(payload.payload.gameMode || "classic");
-                        setStatus("playing");
-                    }
-                })
-                .subscribe(async (subStatus: string) => {
-                    if (subStatus === 'SUBSCRIBED') {
-                        await channelRef.current.track({ role: 'player', name: name });
-                    }
-                });
-        } catch (err: any) {
-            setError("Failed to connect to game server. Please refresh.");
-        }
-
-        return () => {
-            if (channelRef.current) supabase.removeChannel(channelRef.current);
+        const getCookie = (name: string) => {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop()?.split(';').shift();
+            return "";
         };
+        const id = getCookie("student_id") || `guest-${Math.random().toString(36).slice(2, 6)}`;
+        const name = decodeURIComponent(getCookie("student_name") || "Player");
+
+        setStudentId(id);
+        setStudentName(name);
+
+        // 🚨 1. Join Lobby in DB
+        async function joinLobby() {
+            await supabase.from("game_results").upsert({
+                game_pin: params.pin,
+                student_id: id,
+                student_name: name,
+                score: 0 // Default score for lobby
+            }, { onConflict: 'game_pin,student_id' });
+        }
+        joinLobby();
+
+        // 🚨 2. Listen to DB for Game Start
+        const channel = supabase.channel(`session-${params.pin}`)
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'game_sessions',
+                filter: `pin=eq.${params.pin}`
+            }, (payload) => {
+                if (payload.new.status === 'playing' && payload.new.game_data) {
+                    setGameData(payload.new.game_data);
+                    setGameMode(payload.new.game_mode || "classic");
+                    setStatus("playing");
+                }
+            }).subscribe();
+
+        return () => { supabase.removeChannel(channel); };
     }, [params.pin, supabase]);
 
     const handleGameFinish = async (finalScore: number) => {
         try {
-            await supabase.from("game_results").insert({
-                game_pin: params.pin,
-                student_id: studentId,
-                student_name: studentName,
-                score: finalScore
-            });
+            // Update DB with final score
+            await supabase.from("game_results").update({ score: finalScore }).eq("game_pin", params.pin).eq("student_id", studentId);
 
+            // Give coins
             const res = await fetch("/api/game/reward", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -77,22 +73,11 @@ export default function PlayGame({ params }: { params: { pin: string } }) {
             const data = await res.json();
             if (res.ok) setCoinsEarned(data.added);
         } catch (e) {
-            console.error("Failed to save score", e);
+            console.error(e);
         } finally {
             setStatus("finished");
         }
     };
-
-    if (error) {
-        return (
-            <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white p-6">
-                <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
-                <h1 className="text-2xl font-bold mb-2">Connection Error</h1>
-                <p className="text-slate-400 mb-6 text-center">{error}</p>
-                <button onClick={() => window.location.reload()} className="bg-emerald-600 px-6 py-3 rounded-xl font-bold">Retry</button>
-            </div>
-        );
-    }
 
     if (status === "lobby") {
         return (
@@ -118,18 +103,11 @@ export default function PlayGame({ params }: { params: { pin: string } }) {
                     <Coins className="w-24 h-24 text-amber-400 mx-auto mb-6 animate-bounce" />
                     <h1 className="text-4xl font-black mb-2">Game Over!</h1>
                     <p className="text-xl text-slate-400 font-bold mb-8">Great job, {studentName}!</p>
-
                     <div className="bg-amber-500/10 border border-amber-500/30 p-6 rounded-2xl mb-8">
                         <p className="text-sm font-bold text-amber-400 uppercase tracking-wider mb-1">Coins Earned</p>
                         <p className="text-5xl font-black text-white">+{coinsEarned} 🪙</p>
                     </div>
-
-                    <button
-                        onClick={() => router.push("/student")}
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg"
-                    >
-                        Back to Dashboard
-                    </button>
+                    <button onClick={() => router.push("/student")} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl transition-all">Back to Dashboard</button>
                 </div>
             </div>
         );
@@ -137,15 +115,7 @@ export default function PlayGame({ params }: { params: { pin: string } }) {
 
     return (
         <div className="h-screen w-screen overflow-hidden">
-            {gameData ? (
-                <TBAArena
-                    gameData={gameData}
-                    gameMode={gameMode}
-                    onFinish={handleGameFinish}
-                />
-            ) : (
-                <div className="flex h-full items-center justify-center text-white font-bold text-xl">Loading quiz data...</div>
-            )}
+            <TBAArena gameData={gameData} gameMode={gameMode} onFinish={handleGameFinish} />
         </div>
     );
 }

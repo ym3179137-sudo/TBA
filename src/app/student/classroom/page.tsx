@@ -10,25 +10,34 @@ export default function StudentClassroom() {
     const supabase = useMemo(() => createClient(), []);
     const [loading, setLoading] = useState(true);
     const [liveData, setLiveData] = useState<any>(null);
+    const [currentSlide, setCurrentSlide] = useState(0);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const laserCanvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
+    // Set exact canvas size to match the container
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
                 const { clientWidth, clientHeight } = containerRef.current;
-                if (canvasRef.current) { canvasRef.current.width = clientWidth; canvasRef.current.height = clientHeight; }
-                if (laserCanvasRef.current) { laserCanvasRef.current.width = clientWidth; laserCanvasRef.current.height = clientHeight; }
+                if (canvasRef.current) {
+                    canvasRef.current.width = clientWidth;
+                    canvasRef.current.height = clientHeight;
+                }
+                if (laserCanvasRef.current) {
+                    laserCanvasRef.current.width = clientWidth;
+                    laserCanvasRef.current.height = clientHeight;
+                }
             }
         };
         updateSize();
         window.addEventListener('resize', updateSize);
         return () => window.removeEventListener('resize', updateSize);
-    }, [loading]);
+    }, [liveData, currentSlide]);
 
+    // Laser fading effect
     const laserPoints = useRef<{ x: number; y: number; life: number }[]>([]);
     useEffect(() => {
         let animationFrameId: number;
@@ -75,8 +84,8 @@ export default function StudentClassroom() {
                 const { data: pres } = await supabase.from("presentations").select("deck_data, title, file_url").eq("id", data[0].presentation_id).single();
                 if (pres) {
                     setLiveData({ ...data[0], presentation: pres });
+                    setCurrentSlide(data[0].current_slide || 0);
                     subscribeToChannel(data[0].id, studentId, studentName);
-                    setupDbListener(data[0].id);
                 }
             }
             setLoading(false);
@@ -85,28 +94,8 @@ export default function StudentClassroom() {
 
         return () => {
             if (channelRef.current) supabase.removeChannel(channelRef.current);
-            supabase.removeChannel(supabase.channel('live-db-listener'));
         };
     }, [supabase]);
-
-    // 🚨 Fallback Listener: If WebSocket drops, DB update triggers slide change
-    function setupDbListener(sessionId: string) {
-        supabase.channel('live-db-listener')
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'live_sessions' }, (payload) => {
-                const newSession = payload.new as any;
-                if (newSession.id === sessionId && newSession.current_slide !== undefined) {
-                    setLiveData((prev: any) => {
-                        if (prev && prev.current_slide !== newSession.current_slide) {
-                            // Clear canvas on slide change
-                            const ctx = canvasRef.current?.getContext('2d');
-                            if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                            return { ...prev, current_slide: newSession.current_slide };
-                        }
-                        return prev;
-                    });
-                }
-            }).subscribe();
-    }
 
     function subscribeToChannel(sessionId: string, studentId: string, studentName: string) {
         if (channelRef.current) supabase.removeChannel(channelRef.current);
@@ -116,26 +105,20 @@ export default function StudentClassroom() {
         });
 
         channelRef.current
-            .on('presence', { event: 'sync' }, () => { })
+            // 🚨 Teacher changed the slide
             .on('broadcast', { event: 'slide_change' }, (payload: any) => {
-                setLiveData((prev: any) => ({ ...prev, current_slide: payload.payload.slide }));
+                setCurrentSlide(payload.payload.slide);
+                // Clear the drawing canvas when the slide changes
                 const ctx = canvasRef.current?.getContext('2d');
-                if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                if (ctx && canvasRef.current) {
+                    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                }
             })
+            // 🚨 Teacher moved the laser
             .on('broadcast', { event: 'laser' }, (payload: any) => {
                 laserPoints.current.push({ x: payload.payload.x, y: payload.payload.y, life: 1.0 });
             })
-            .on('broadcast', { event: 'dot' }, (payload: any) => {
-                const ctx = canvasRef.current?.getContext('2d');
-                if (ctx && canvasRef.current) {
-                    ctx.beginPath();
-                    ctx.arc(payload.payload.x * canvasRef.current.width, payload.payload.y * canvasRef.current.height, 2, 0, Math.PI * 2);
-                    ctx.fillStyle = "#ef4444";
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.moveTo(payload.payload.x * canvasRef.current.width, payload.payload.y * canvasRef.current.height);
-                }
-            })
+            // 🚨 Teacher drew a line
             .on('broadcast', { event: 'draw' }, (payload: any) => {
                 const ctx = canvasRef.current?.getContext('2d');
                 if (ctx && canvasRef.current) {
@@ -147,6 +130,19 @@ export default function StudentClassroom() {
                     ctx.stroke();
                 }
             })
+            // 🚨 Teacher drew a dot
+            .on('broadcast', { event: 'dot' }, (payload: any) => {
+                const ctx = canvasRef.current?.getContext('2d');
+                if (ctx && canvasRef.current) {
+                    ctx.beginPath();
+                    ctx.arc(payload.payload.x * canvasRef.current.width, payload.payload.y * canvasRef.current.height, 2, 0, Math.PI * 2);
+                    ctx.fillStyle = "#ef4444";
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(payload.payload.x * canvasRef.current.width, payload.payload.y * canvasRef.current.height);
+                }
+            })
+            // 🚨 Teacher typed text
             .on('broadcast', { event: 'text' }, (payload: any) => {
                 const ctx = canvasRef.current?.getContext('2d');
                 if (ctx && canvasRef.current) {
@@ -155,6 +151,7 @@ export default function StudentClassroom() {
                     ctx.fillText(payload.payload.text, payload.payload.x * canvasRef.current.width, payload.payload.y * canvasRef.current.height);
                 }
             })
+            // 🚨 Teacher cleared the canvas
             .on('broadcast', { event: 'clear' }, () => {
                 const ctx = canvasRef.current?.getContext('2d');
                 if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
@@ -183,9 +180,9 @@ export default function StudentClassroom() {
                         <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(liveData.presentation.file_url)}`} className="w-full h-full border-none pointer-events-none" />
                     ) : (
                         <DeckViewer
-                            key={liveData.current_slide} // 🚨 Forces instant re-render on slide change
+                            key={currentSlide} // 🚨 Forces the DeckViewer to completely reload on slide change
                             deck={liveData.presentation.deck_data}
-                            externalSlide={liveData.current_slide}
+                            externalSlide={currentSlide}
                             onSlideChange={() => { }}
                             isStudentView={true}
                         />
