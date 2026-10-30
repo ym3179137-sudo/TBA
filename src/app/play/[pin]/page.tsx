@@ -1,13 +1,16 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation"; // 🚨 Imported useParams
 import { createClient } from "@/lib/supabase/client";
 import { Gamepad2, Loader2, Coins } from "lucide-react";
 import TBAArena from "@/components/TBAArena";
 
-export default function PlayGame({ params }: { params: { pin: string } }) {
+export default function PlayGame() {
     const router = useRouter();
+    const params = useParams(); // 🚨 Get params using useParams hook
+    const pin = params?.pin as string; // 🚨 Safely get the PIN
+
     const supabase = useMemo(() => createClient(), []);
 
     const [status, setStatus] = useState("lobby");
@@ -18,13 +21,14 @@ export default function PlayGame({ params }: { params: { pin: string } }) {
     const [coinsEarned, setCoinsEarned] = useState(0);
 
     useEffect(() => {
+        if (!pin) return; // Wait until pin is loaded
+
         const getCookie = (name: string) => {
             const value = `; ${document.cookie}`;
             const parts = value.split(`; ${name}=`);
             if (parts.length === 2) return parts.pop()?.split(';').shift();
             return "";
         };
-        // Fallback to a guest ID if they aren't logged in
         const id = getCookie("student_id") || `guest-${Math.random().toString(36).slice(2, 6)}`;
         const name = decodeURIComponent(getCookie("student_name") || "Guest Player");
 
@@ -34,7 +38,7 @@ export default function PlayGame({ params }: { params: { pin: string } }) {
         // 🚨 1. Join Lobby in DB
         async function joinLobby() {
             const { error } = await supabase.from("game_results").upsert({
-                game_pin: params.pin,
+                game_pin: pin, // 🚨 Use the unwrapped pin
                 student_id: id,
                 student_name: name,
                 score: 0
@@ -48,12 +52,12 @@ export default function PlayGame({ params }: { params: { pin: string } }) {
         joinLobby();
 
         // 🚨 2. Listen to DB for Game Start
-        const channel = supabase.channel(`session-${params.pin}`)
+        const channel = supabase.channel(`session-${pin}`)
             .on('postgres_changes', {
                 event: 'UPDATE',
                 schema: 'public',
                 table: 'game_sessions',
-                filter: `pin=eq.${params.pin}`
+                filter: `pin=eq.${pin}`
             }, (payload) => {
                 if (payload.new.status === 'playing' && payload.new.game_data) {
                     setGameData(payload.new.game_data);
@@ -63,11 +67,11 @@ export default function PlayGame({ params }: { params: { pin: string } }) {
             }).subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [params.pin, supabase]);
+    }, [pin, supabase]);
 
     const handleGameFinish = async (finalScore: number) => {
         try {
-            await supabase.from("game_results").update({ score: finalScore }).eq("game_pin", params.pin).eq("student_id", studentId);
+            await supabase.from("game_results").update({ score: finalScore }).eq("game_pin", pin).eq("student_id", studentId);
 
             const res = await fetch("/api/game/reward", {
                 method: "POST",
