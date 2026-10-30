@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Gamepad2, Loader2, Coins } from "lucide-react";
+import { Gamepad2, Loader2, Coins, AlertCircle } from "lucide-react";
 import TBAArena from "@/components/TBAArena";
 
 export default function PlayGame({ params }: { params: { pin: string } }) {
@@ -16,45 +16,44 @@ export default function PlayGame({ params }: { params: { pin: string } }) {
     const [studentName, setStudentName] = useState("");
     const [studentId, setStudentId] = useState("");
     const [coinsEarned, setCoinsEarned] = useState(0);
+    const [error, setError] = useState<string | null>(null);
 
     const channelRef = useRef<any>(null);
 
     useEffect(() => {
-        const getCookie = (name: string) => {
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop()?.split(';').shift();
-            return "";
-        };
-        const id = getCookie("student_id") || `guest-${Math.random().toString(36).slice(2, 6)}`;
-        const name = decodeURIComponent(getCookie("student_name") || "Player");
+        try {
+            const getCookie = (name: string) => {
+                const value = `; ${document.cookie}`;
+                const parts = value.split(`; ${name}=`);
+                if (parts.length === 2) return parts.pop()?.split(';').shift();
+                return "";
+            };
+            const id = getCookie("student_id") || `guest-${Math.random().toString(36).slice(2, 6)}`;
+            const name = decodeURIComponent(getCookie("student_name") || "Player");
 
-        setStudentId(id);
-        setStudentName(name);
+            setStudentId(id);
+            setStudentName(name);
 
-        // 🚨 Setup Realtime Channel
-        channelRef.current = supabase.channel(`game-lobby-${params.pin}`, {
-            config: { presence: { key: id } }
-        });
-
-        channelRef.current
-            .on('broadcast', { event: 'start_game' }, (payload: any) => {
-                // 🚨 Receive the quiz data directly from the teacher
-                if (payload.payload?.gameData) {
-                    setGameData(payload.payload.gameData);
-                    setGameMode(payload.payload.gameMode || "classic");
-                    setStatus("playing");
-                }
-            })
-            .subscribe(async (subStatus: string) => {
-                if (subStatus === 'SUBSCRIBED') {
-                    // Track the student's presence so the teacher sees them
-                    await channelRef.current.track({
-                        role: 'player',
-                        name: name
-                    });
-                }
+            channelRef.current = supabase.channel(`game-lobby-${params.pin}`, {
+                config: { presence: { key: id } }
             });
+
+            channelRef.current
+                .on('broadcast', { event: 'start_game' }, (payload: any) => {
+                    if (payload.payload?.gameData) {
+                        setGameData(payload.payload.gameData);
+                        setGameMode(payload.payload.gameMode || "classic");
+                        setStatus("playing");
+                    }
+                })
+                .subscribe(async (subStatus: string) => {
+                    if (subStatus === 'SUBSCRIBED') {
+                        await channelRef.current.track({ role: 'player', name: name });
+                    }
+                });
+        } catch (err: any) {
+            setError("Failed to connect to game server. Please refresh.");
+        }
 
         return () => {
             if (channelRef.current) supabase.removeChannel(channelRef.current);
@@ -83,6 +82,17 @@ export default function PlayGame({ params }: { params: { pin: string } }) {
             setStatus("finished");
         }
     };
+
+    if (error) {
+        return (
+            <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white p-6">
+                <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
+                <h1 className="text-2xl font-bold mb-2">Connection Error</h1>
+                <p className="text-slate-400 mb-6 text-center">{error}</p>
+                <button onClick={() => window.location.reload()} className="bg-emerald-600 px-6 py-3 rounded-xl font-bold">Retry</button>
+            </div>
+        );
+    }
 
     if (status === "lobby") {
         return (

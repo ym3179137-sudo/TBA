@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import DeckViewer from "@/components/DeckViewer";
-import { StopCircle, Loader2, MousePointer2, PenTool, Trash2, Type, Users, CheckCircle, XCircle, ArrowLeft, ArrowRight, Download } from "lucide-react";
+import { StopCircle, Loader2, MousePointer2, PenTool, Trash2, Type, Users, CheckCircle, XCircle, ArrowLeft, ArrowRight } from "lucide-react";
 
 export default function TeacherLivePresenter() {
     const router = useRouter();
@@ -96,7 +96,6 @@ export default function TeacherLivePresenter() {
             if (session) {
                 setSessionId(session.id);
 
-                // 🚨 Setup Presence Tracking for Teacher
                 channelRef.current = supabase.channel(`live-room-${session.id}`, {
                     config: { presence: { key: `teacher-${user.id}` } }
                 });
@@ -131,14 +130,15 @@ export default function TeacherLivePresenter() {
         setCurrentSlide(target);
         clearCanvas();
 
-        // 🚨 Broadcast slide change to students instantly
+        // 1. Update DB first (Guaranteed sync)
+        if (sessionId) await supabase.from("live_sessions").update({ current_slide: target }).eq("id", sessionId);
+
+        // 2. Broadcast to WebSocket (Instant UI update)
         channelRef.current?.send({
             type: 'broadcast',
             event: 'slide_change',
             payload: { slide: target }
         });
-
-        if (sessionId) await supabase.from("live_sessions").update({ current_slide: target }).eq("id", sessionId);
     };
 
     const handleMouseMove = (e: React.MouseEvent) => {
