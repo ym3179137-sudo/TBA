@@ -160,8 +160,8 @@ export default function TeacherArena() {
                         </div>
                     </div>
 
-                    {/* 🚨 Removed players.length === 0 check to allow testing */}
-                    <button onClick={handleStartGame} disabled={isStarting || presentations.length === 0} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl py-5 rounded-2xl shadow-xl disabled:opacity-50 flex items-center justify-center gap-3">
+                    {/* 🚨 REMOVED disabled={players.length === 0} check */}
+                    <button onClick={handleStartGame} disabled={isStarting} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl py-5 rounded-2xl shadow-xl disabled:opacity-50 flex items-center justify-center gap-3 transition-all">
                         <Play size={24} /> {isStarting ? "Starting..." : "Start Game!"}
                     </button>
                 </div>

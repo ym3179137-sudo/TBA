@@ -35,18 +35,23 @@ export default function PlayGame() {
         setStudentId(id);
         setStudentName(name);
 
-        // 1. Join Lobby in DB
+        // 🚨 1. Join Lobby in DB
         async function joinLobby() {
-            await supabase.from("game_results").upsert({
+            const { error } = await supabase.from("game_results").upsert({
                 game_pin: pin,
                 student_id: id,
                 student_name: name,
                 score: 0
             }, { onConflict: 'game_pin,student_id' });
+
+            if (error) {
+                console.error("Failed to join lobby:", error);
+                alert("Error joining game: " + error.message);
+            }
         }
         joinLobby();
 
-        // 🚨 2. POLLING FALLBACK (100% reliable)
+        // 🚨 2. POLLING FALLBACK
         const interval = setInterval(async () => {
             const { data } = await supabase
                 .from("game_sessions")
@@ -58,7 +63,7 @@ export default function PlayGame() {
                 setGameData(data.game_data);
                 setGameMode(data.game_mode || "classic");
                 setStatus("playing");
-                clearInterval(interval); // Stop polling once started
+                clearInterval(interval);
             }
         }, 1500);
 
