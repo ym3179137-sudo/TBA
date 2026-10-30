@@ -3,36 +3,71 @@
 import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Trophy, Crown, ArrowLeft, Loader2, StopCircle, FileText, X, CheckCircle, AlertCircle } from "lucide-react";
+import { Trophy, Crown, ArrowLeft, Loader2, StopCircle, FileText, X, CheckCircle, AlertCircle, Volume2, Download } from "lucide-react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, Environment, ContactShadows, useGLTF, Html } from "@react-three/drei";
+import { OrbitControls, Environment, ContactShadows, useGLTF, Html, useAnimations } from "@react-three/drei";
 import * as THREE from "three";
 
-// 🚨 3D Avatar Component with Emote Animations
-function WinningAvatar({ modelUrl, emote }: { modelUrl: string, emote: string }) {
+// 🚨 Sound Mapping
+const EMOTE_SOUNDS: Record<string, string> = {
+    dance: "https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3",
+    spin: "https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3",
+    cheer: "https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3"
+};
+
+// 🚨 Multi-Avatar Podium
+function AwardCeremony({ players, isDancing }: { players: any[], isDancing: boolean }) {
+    return (
+        <>
+            {players.map((player, index) => {
+                const xOffset = (index - (players.length - 1) / 2) * 2.5; // Spread them out
+                return (
+                    <group key={player.student_id} position={[xOffset, 0, 0]}>
+                        <SingleAvatar
+                            modelUrl={player.equipped_skin}
+                            emote={isDancing ? player.equipped_emote : 'none'}
+                        />
+                    </group>
+                );
+            })}
+        </>
+    );
+}
+
+function SingleAvatar({ modelUrl, emote }: { modelUrl: string, emote: string }) {
     const fallback = "https://modelviewer.dev/shared-assets/models/Astronaut.glb";
     const safeUrl = modelUrl && modelUrl.startsWith("http") ? modelUrl : fallback;
-    const { scene } = useGLTF(safeUrl);
+
+    const { scene, animations } = useGLTF(safeUrl);
+    const { actions, names } = useAnimations(animations, scene);
     const ref = useRef<THREE.Group>(null);
+
+    useEffect(() => {
+        if (actions && names.length > 0) {
+            if (emote !== 'none') {
+                const action = actions[names[0]];
+                action?.reset().fadeIn(0.5).play();
+            } else {
+                Object.values(actions).forEach(action => action?.stop());
+            }
+        }
+    }, [actions, names, emote]);
 
     useFrame((state) => {
         if (!ref.current) return;
-
-        // 🕺 Emote Logic
-        if (emote === 'dance') {
+        if (emote === 'dance' && (!actions || names.length === 0)) {
             ref.current.rotation.y = Math.sin(state.clock.elapsedTime * 8) * 0.5;
             ref.current.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 8)) * 0.4;
-        } else if (emote === 'spin') {
+        } else if (emote === 'spin' && (!actions || names.length === 0)) {
             ref.current.rotation.y += 0.05;
-        } else {
-            // Default idle float
+        } else if (emote === 'none') {
             ref.current.position.y = Math.sin(state.clock.elapsedTime * 2) * 0.05;
         }
     });
 
     return (
         <group ref={ref}>
-            <primitive object={scene.clone()} scale={1.5} position={[0, -1.5, 0]} />
+            <primitive object={scene.clone()} scale={1.2} position={[0, -1.5, 0]} />
         </group>
     );
 }
@@ -40,10 +75,7 @@ function WinningAvatar({ modelUrl, emote }: { modelUrl: string, emote: string })
 function AvatarLoader() {
     return (
         <Html center>
-            <div className="flex flex-col items-center justify-center bg-slate-900/90 p-6 rounded-2xl border border-slate-700 shadow-2xl backdrop-blur-md">
-                <Loader2 className="w-10 h-10 text-amber-400 animate-spin mb-3" />
-                <p className="text-white font-bold whitespace-nowrap">Loading Winner...</p>
-            </div>
+            <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
         </Html>
     );
 }
@@ -56,137 +88,188 @@ export default function GameHost() {
 
     const [scores, setScores] = useState<any[]>([]);
     const [isEnding, setIsEnding] = useState(false);
+    const [isDancing, setIsDancing] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
-    // Winner States
-    const [winnerAvatar, setWinnerAvatar] = useState<string>("");
-    const [winnerEmote, setWinnerEmote] = useState<string>("none");
-
-    // Report State
     const [selectedStudent, setSelectedStudent] = useState<any>(null);
+    const audioRef = useRef<HTMLAudioElement>(null);
 
     useEffect(() => {
         if (!pin) return;
 
         const interval = setInterval(async () => {
-            // 1. Fetch live scores
             const { data } = await supabase.from("game_results").select("*").eq("game_pin", pin);
 
             if (data) {
                 const sorted = data.sort((a, b) => b.score - a.score);
-                setScores(sorted);
 
-                // 2. Fetch winner's avatar & emote if there is a leader
-                if (sorted.length > 0 && sorted[0].score > 0) {
-                    const { data: student } = await supabase
-                        .from("children")
-                        .select("equipped_skin, equipped_emote")
-                        .eq("id", sorted[0].student_id)
-                        .single();
+                // Fetch avatars for top 5 players
+                const topPlayers = sorted.slice(0, 5);
+                const enrichedPlayers = await Promise.all(topPlayers.map(async (p) => {
+                    const { data: student } = await supabase.from("children").select("equipped_skin, equipped_emote").eq("id", p.student_id).single();
+                    return { ...p, ...student };
+                }));
 
-                    if (student) {
-                        setWinnerAvatar(student.equipped_skin || "");
-                        setWinnerEmote(student.equipped_emote || "none");
-                    }
-                }
+                setScores(enrichedPlayers);
             }
         }, 1500);
 
         return () => clearInterval(interval);
     }, [pin, supabase]);
 
+    // 🚨 Play sound for exactly 5 seconds when game ends
+    useEffect(() => {
+        if (isDancing && audioRef.current) {
+            audioRef.current.volume = 0.5;
+            audioRef.current.currentTime = 0;
+            audioRef.current.play().catch((e) => console.log("Audio play failed:", e));
+
+            const timer = setTimeout(() => {
+                setIsDancing(false);
+                if (audioRef.current) {
+                    audioRef.current.pause();
+                    audioRef.current.currentTime = 0;
+                }
+            }, 5000);
+
+            return () => clearTimeout(timer);
+        }
+    }, [isDancing]);
+
     const endGame = async () => {
         setIsEnding(true);
         await supabase.from("game_sessions").update({ status: 'finished' }).eq("pin", pin);
-        router.push("/teacher/arena");
+        setIsDancing(true); // Trigger the dance!
+    };
+
+    // 🚨 Save Report Card to Library
+    const saveReportToLibrary = async (student: any) => {
+        setIsSaving(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            setIsSaving(false);
+            return;
+        }
+
+        // Create a text summary of their answers
+        const reportText = student.answers_log.map((log: any) =>
+            `Q: ${log.question}\nStudent: ${log.studentAnswer} (${log.isCorrect ? 'Correct' : 'Wrong'})\nCorrect: ${log.correctAnswer}\n`
+        ).join("\n-------------------\n");
+
+        const deckData = {
+            title: `Report Card - ${student.student_name}`,
+            slides: [{
+                heading: `${student.student_name}'s Report`,
+                bullets: [
+                    `Score: ${student.score} pts`,
+                    `Accuracy: ${Math.round((student.answers_log.filter((l: any) => l.isCorrect).length / student.answers_log.length) * 100)}%`
+                ],
+                teacherPrompt: reportText
+            }]
+        };
+
+        const { error } = await supabase.from("presentations").insert({
+            teacher_id: user.id,
+            title: `Report Card - ${student.student_name}`,
+            deck_data: deckData,
+            target_type: 'student',
+            target_value: student.student_id
+        });
+
+        setIsSaving(false);
+        if (error) alert("Failed to save: " + error.message);
+        else alert("✅ Report Card saved to Library and sent to Parents!");
     };
 
     return (
         <div className="min-h-screen bg-slate-950 text-white p-8 font-sans flex flex-col items-center">
 
-            {/* Top Navigation */}
-            <button onClick={() => router.push('/teacher/arena')} className="absolute top-8 left-8 flex items-center gap-2 text-slate-400 hover:text-white font-bold bg-slate-900 px-5 py-2.5 rounded-xl border border-slate-800 z-50 transition-colors">
+            {/* 🚨 Hidden audio for the ceremony */}
+            <audio ref={audioRef} src={EMOTE_SOUNDS['dance']} />
+
+            <button onClick={() => router.push('/teacher/arena')} className="absolute top-8 left-8 flex items-center gap-2 text-slate-400 hover:text-white font-bold bg-slate-900 px-5 py-2.5 rounded-xl border border-slate-800 z-50">
                 <ArrowLeft size={20} /> Exit
             </button>
 
-            <button onClick={endGame} disabled={isEnding} className="absolute top-8 right-8 flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2.5 rounded-xl shadow-lg z-50 transition-colors">
-                <StopCircle size={20} /> {isEnding ? "Ending..." : "End Game"}
-            </button>
+            {!isEnding ? (
+                <button onClick={endGame} className="absolute top-8 right-8 flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2.5 rounded-xl shadow-lg z-50">
+                    <StopCircle size={20} /> End & Dance
+                </button>
+            ) : (
+                <div className="absolute top-8 right-8 text-amber-400 font-bold px-6 py-2.5 z-50 bg-black/50 rounded-xl">
+                    {isDancing ? "🎉 PARTY TIME! 🎉" : "Ceremony Finished"}
+                </div>
+            )}
 
             <div className="w-full max-w-6xl mt-16 flex flex-col lg:flex-row gap-8">
 
                 {/* LEFT: Live Leaderboard */}
                 <div className="flex-1">
-                    <h1 className="text-4xl font-black text-center mb-8">Live Leaderboard</h1>
+                    <h1 className="text-4xl font-black text-center mb-8">Final Leaderboard</h1>
                     <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
                         {scores.map((s, i) => (
-                            <div key={s.id} className={`flex justify-between items-center p-4 rounded-xl border transition-all ${i === 0 ? 'bg-amber-500/20 border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.2)]' : 'bg-slate-900 border-slate-800'}`}>
+                            <div key={s.student_id} className={`flex justify-between items-center p-4 rounded-xl border ${i === 0 ? 'bg-amber-500/20 border-amber-500' : 'bg-slate-900 border-slate-800'}`}>
                                 <span className="font-bold text-lg flex items-center gap-2">
                                     {i === 0 && <Crown size={18} className="text-amber-400" />}
                                     {i + 1}. {s.student_name}
                                 </span>
                                 <div className="flex gap-4 items-center">
-                                    <span className={`font-black text-lg ${i === 0 ? 'text-amber-400' : 'text-slate-400'}`}>{s.score} pts</span>
-
-                                    {/* View Report Button */}
+                                    <span className="font-black text-lg text-slate-300">{s.score} pts</span>
                                     {s.answers_log && s.answers_log.length > 0 && (
-                                        <button onClick={() => setSelectedStudent(s)} className="bg-indigo-600 p-2 rounded-lg hover:bg-indigo-500 transition-colors" title="View Report">
+                                        <button onClick={() => setSelectedStudent(s)} className="bg-indigo-600 p-2 rounded-lg hover:bg-indigo-500">
                                             <FileText size={18} />
                                         </button>
                                     )}
                                 </div>
                             </div>
                         ))}
-                        {scores.length === 0 && (
-                            <div className="text-center text-slate-500 py-12">Waiting for players to join...</div>
-                        )}
                     </div>
                 </div>
 
-                {/* RIGHT: Winner Podium & 3D Model */}
+                {/* RIGHT: 3D Stage */}
                 <div className="flex-1 bg-slate-900 border-2 border-amber-500 rounded-3xl p-8 flex flex-col items-center justify-center relative shadow-[0_0_100px_rgba(245,158,11,0.15)] h-[500px] overflow-hidden">
-                    {scores.length > 0 && scores[0].score > 0 ? (
-                        <>
-                            {/* 3D Viewer */}
-                            <div className="absolute inset-0 z-0 cursor-move">
-                                <Canvas shadows camera={{ position: [0, 2, 6], fov: 50 }}>
-                                    <ambientLight intensity={0.7} />
-                                    <spotLight position={[10, 10, 10]} intensity={1.5} angle={0.15} penumbra={1} castShadow />
-                                    <Suspense fallback={<AvatarLoader />}>
-                                        <WinningAvatar modelUrl={winnerAvatar} emote={winnerEmote} />
-                                    </Suspense>
-                                    <ContactShadows position={[0, -1.5, 0]} opacity={0.7} scale={10} blur={2} />
-                                    <Environment preset="city" />
-                                    <OrbitControls autoRotate={winnerEmote === 'none'} enableZoom={true} />
-                                </Canvas>
-                            </div>
-
-                            {/* Overlay Text */}
-                            <div className="absolute top-8 z-10 flex flex-col items-center pointer-events-none">
-                                <Crown className="w-16 h-16 text-amber-400 mb-2 animate-bounce drop-shadow-lg" />
-                                <h2 className="text-3xl font-black text-white drop-shadow-md bg-black/50 px-4 py-1 rounded-xl backdrop-blur-sm">{scores[0].student_name}</h2>
-                                <p className="text-amber-400 font-bold text-lg mt-2 drop-shadow-md bg-black/50 px-4 py-1 rounded-xl backdrop-blur-sm">WINS THE TOURNAMENT!</p>
-                            </div>
-                        </>
+                    {scores.length > 0 ? (
+                        <div className="absolute inset-0 z-0">
+                            <Canvas shadows camera={{ position: [0, 2, 10], fov: 50 }}>
+                                <ambientLight intensity={0.8} />
+                                <spotLight position={[10, 10, 10]} intensity={1.5} castShadow />
+                                <Suspense fallback={<AvatarLoader />}>
+                                    <AwardCeremony players={scores} isDancing={isDancing} />
+                                </Suspense>
+                                <ContactShadows position={[0, -1.5, 0]} opacity={0.7} scale={15} blur={2} />
+                                <Environment preset="city" />
+                            </Canvas>
+                        </div>
                     ) : (
                         <div className="text-center text-slate-500 z-10">
                             <Trophy className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                            <p>Waiting for a winner...</p>
+                            <p>Waiting for players...</p>
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* 🚨 REPORT MODAL */}
+            {/* 🚨 REPORT MODAL WITH SAVE */}
             {selectedStudent && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
                     <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-3xl shadow-2xl p-8 relative max-h-[90vh] flex flex-col">
 
-                        <button onClick={() => setSelectedStudent(null)} className="absolute top-6 right-6 text-slate-400 hover:text-white bg-slate-800 p-2 rounded-xl transition-colors">
+                        <button onClick={() => setSelectedStudent(null)} className="absolute top-6 right-6 text-slate-400 hover:text-white bg-slate-800 p-2 rounded-xl">
                             <X size={20} />
                         </button>
 
                         <h2 className="text-2xl font-black mb-1">{selectedStudent.student_name}'s Report</h2>
-                        <p className="text-slate-400 mb-6">Final Score: <span className="text-white font-bold">{selectedStudent.score} pts</span></p>
+                        <p className="text-slate-400 mb-4">Score: {selectedStudent.score} pts</p>
+
+                        {/* 🚨 SAVE BUTTON */}
+                        <button
+                            onClick={() => saveReportToLibrary(selectedStudent)}
+                            disabled={isSaving}
+                            className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 mb-6 shadow-lg transition-all"
+                        >
+                            {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
+                            {isSaving ? "Saving to Library..." : "Save Report Card & Send to Parents"}
+                        </button>
 
                         <div className="overflow-y-auto space-y-3 pr-2">
                             {selectedStudent.answers_log.map((log: any, i: number) => (
@@ -196,14 +279,10 @@ export default function GameHost() {
                                     </div>
                                     <div className="flex-1">
                                         <p className="font-bold text-white mb-1">{log.question}</p>
-                                        <p className="text-sm text-slate-400">Student answered: <span className={`font-bold ${log.isCorrect ? 'text-emerald-400' : 'text-red-400'}`}>{log.studentAnswer}</span></p>
-                                        {!log.isCorrect && <p className="text-sm text-slate-500">Correct answer: <span className="font-bold text-emerald-500">{log.correctAnswer}</span></p>}
+                                        <p className="text-sm text-slate-400">Answer: <span className={log.isCorrect ? 'text-emerald-400' : 'text-red-400'}>{log.studentAnswer}</span></p>
                                     </div>
                                 </div>
                             ))}
-                            {selectedStudent.answers_log.length === 0 && (
-                                <p className="text-center text-slate-500 py-8">No questions answered yet.</p>
-                            )}
                         </div>
                     </div>
                 </div>
