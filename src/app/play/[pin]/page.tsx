@@ -1,22 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Gamepad2, Loader2, Coins, AlertTriangle } from "lucide-react";
+import { Gamepad2, Loader2, Coins } from "lucide-react";
 import TBAArena from "@/components/TBAArena";
 
 export default function PlayGame({ params }: { params: { pin: string } }) {
     const router = useRouter();
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
 
     const [status, setStatus] = useState("lobby");
     const [gameData, setGameData] = useState<any>(null);
     const [gameMode, setGameMode] = useState("classic");
     const [studentName, setStudentName] = useState("");
     const [studentId, setStudentId] = useState("");
-
     const [coinsEarned, setCoinsEarned] = useState(0);
+
+    const channelRef = useRef<any>(null);
 
     useEffect(() => {
         const getCookie = (name: string) => {
@@ -25,52 +26,39 @@ export default function PlayGame({ params }: { params: { pin: string } }) {
             if (parts.length === 2) return parts.pop()?.split(';').shift();
             return "";
         };
-
-        const id = getCookie("student_id") || "";
-        const name = getCookie("student_name") || "Player";
+        const id = getCookie("student_id") || `guest-${Math.random().toString(36).slice(2, 6)}`;
+        const name = decodeURIComponent(getCookie("student_name") || "Player");
 
         setStudentId(id);
-        setStudentName(decodeURIComponent(name));
+        setStudentName(name);
 
-        const checkSession = async () => {
-            const { data } = await supabase.from("game_sessions").select("*").eq("pin", params.pin).single();
-            if (data) {
-                setGameMode(data.game_mode || "classic");
-                if (data.status === "playing") {
-                    // Fetch real questions based on your DB setup. Mock for now:
-                    setGameData({
-                        questions: [
-                            { prompt: "What is 1+1?", options: ["2", "3", "4", "5"], correctAnswer: "2" },
-                            { prompt: "What color is the sky?", options: ["Blue", "Red", "Green", "Yellow"], correctAnswer: "Blue" },
-                            { prompt: "Which is a fruit?", options: ["Apple", "Carrot", "Broccoli", "Potato"], correctAnswer: "Apple" },
-                            { prompt: "Which animal says Meow?", options: ["Dog", "Cat", "Cow", "Duck"], correctAnswer: "Cat" }
-                        ]
-                    });
+        // 🚨 Setup Realtime Channel
+        channelRef.current = supabase.channel(`game-lobby-${params.pin}`, {
+            config: { presence: { key: id } }
+        });
+
+        channelRef.current
+            .on('broadcast', { event: 'start_game' }, (payload: any) => {
+                // 🚨 Receive the quiz data directly from the teacher
+                if (payload.payload?.gameData) {
+                    setGameData(payload.payload.gameData);
+                    setGameMode(payload.payload.gameMode || "classic");
                     setStatus("playing");
                 }
-            }
+            })
+            .subscribe(async (subStatus: string) => {
+                if (subStatus === 'SUBSCRIBED') {
+                    // Track the student's presence so the teacher sees them
+                    await channelRef.current.track({
+                        role: 'player',
+                        name: name
+                    });
+                }
+            });
+
+        return () => {
+            if (channelRef.current) supabase.removeChannel(channelRef.current);
         };
-
-        checkSession();
-
-        const subscription = supabase.channel(`play-${params.pin}`).on('postgres_changes', {
-            event: 'UPDATE', schema: 'public', table: 'game_sessions', filter: `pin=eq.${params.pin}`
-        }, (payload) => {
-            if (payload.new.status === "playing") {
-                setGameMode(payload.new.game_mode || "classic");
-                setGameData({
-                    questions: [
-                        { prompt: "What is 1+1?", options: ["2", "3", "4", "5"], correctAnswer: "2" },
-                        { prompt: "What color is the sky?", options: ["Blue", "Red", "Green", "Yellow"], correctAnswer: "Blue" },
-                        { prompt: "Which is a fruit?", options: ["Apple", "Carrot", "Broccoli", "Potato"], correctAnswer: "Apple" },
-                        { prompt: "Which animal says Meow?", options: ["Dog", "Cat", "Cow", "Duck"], correctAnswer: "Cat" }
-                    ]
-                });
-                setStatus("playing");
-            }
-        }).subscribe();
-
-        return () => { supabase.removeChannel(subscription); };
     }, [params.pin, supabase]);
 
     const handleGameFinish = async (finalScore: number) => {
@@ -139,11 +127,15 @@ export default function PlayGame({ params }: { params: { pin: string } }) {
 
     return (
         <div className="h-screen w-screen overflow-hidden">
-            <TBAArena
-                gameData={gameData}
-                gameMode={gameMode}
-                onFinish={handleGameFinish}
-            />
+            {gameData ? (
+                <TBAArena
+                    gameData={gameData}
+                    gameMode={gameMode}
+                    onFinish={handleGameFinish}
+                />
+            ) : (
+                <div className="flex h-full items-center justify-center text-white font-bold text-xl">Loading quiz data...</div>
+            )}
         </div>
     );
 }

@@ -1,146 +1,332 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import {
-    ArrowLeft, Play, Users, Swords, Zap,
-    Crown, Shield, Ghost, Gamepad2, Fish
-} from "lucide-react";
+import DeckViewer from "@/components/DeckViewer";
+import { StopCircle, Loader2, MousePointer2, PenTool, Trash2, Type, Users, CheckCircle, XCircle, ArrowLeft, ArrowRight, Download } from "lucide-react";
 
-const GAME_MODES = [
-    { id: 'classic', name: 'Classic Quiz', icon: <Swords className="text-blue-400" />, desc: 'Normal Kahoot-style game.' },
-    { id: 'gold_quest', name: 'Gold Quest Frenzy', icon: <Crown className="text-yellow-400" />, desc: 'Answer correctly to trigger Gold Quest and steal points!' },
-    { id: 'hacker', name: 'Hacking Simulator', icon: <Ghost className="text-emerald-400" />, desc: 'Glitch screens and freeze opponents to win.' },
-    { id: 'fishing_frenzy', name: 'Fishing Frenzy', icon: <Fish className="text-cyan-400" />, desc: 'Catch random fish for huge points, or catch an old boot!' },
-];
-
-export default function TeacherArena() {
+export default function TeacherLivePresenter() {
     const router = useRouter();
-    const supabase = createClient();
+    const params = useParams();
+    const presentationId = params?.id as string;
+    const supabase = useMemo(() => createClient(), []);
 
-    const [gamePin, setGamePin] = useState<string | null>(null);
-    const [players, setPlayers] = useState<any[]>([]);
-    const [selectedMode, setSelectedMode] = useState("classic");
-    const [isStarting, setIsStarting] = useState(false);
+    const [presentation, setPresentation] = useState<any>(null);
+    const [currentSlide, setCurrentSlide] = useState(0);
+    const [sessionId, setSessionId] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    const [tool, setTool] = useState<'none' | 'laser' | 'pen' | 'text'>('pen');
+    const [isDrawing, setIsDrawing] = useState(false);
+
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const laserCanvasRef = useRef<HTMLCanvasElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const channelRef = useRef<any>(null);
+
+    const [attendance, setAttendance] = useState<any[]>([]);
+    const [allStudents, setAllStudents] = useState<any[]>([]);
+    const [showEndModal, setShowEndModal] = useState(false);
+    const [excusedIds, setExcusedIds] = useState<string[]>([]);
 
     useEffect(() => {
-        createGameSession();
+        const updateSize = () => {
+            if (containerRef.current) {
+                const { clientWidth, clientHeight } = containerRef.current;
+                if (canvasRef.current) { canvasRef.current.width = clientWidth; canvasRef.current.height = clientHeight; }
+                if (laserCanvasRef.current) { laserCanvasRef.current.width = clientWidth; laserCanvasRef.current.height = clientHeight; }
+            }
+        };
+        updateSize();
+        window.addEventListener('resize', updateSize);
+        return () => window.removeEventListener('resize', updateSize);
+    }, [loading]);
+
+    const laserPoints = useRef<{ x: number; y: number; life: number }[]>([]);
+    useEffect(() => {
+        let animationFrameId: number;
+        const render = () => {
+            const canvas = laserCanvasRef.current;
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    laserPoints.current.forEach((p) => {
+                        p.life -= 0.03;
+                        if (p.life > 0) {
+                            ctx.beginPath();
+                            ctx.arc(p.x * canvas.width, p.y * canvas.height, 6, 0, Math.PI * 2);
+                            ctx.fillStyle = `rgba(239, 68, 68, ${p.life})`;
+                            ctx.shadowBlur = 15;
+                            ctx.shadowColor = '#ef4444';
+                            ctx.fill();
+                        }
+                    });
+                    ctx.shadowBlur = 0;
+                    laserPoints.current = laserPoints.current.filter(p => p.life > 0);
+                }
+            }
+            animationFrameId = requestAnimationFrame(render);
+        };
+        render();
+        return () => cancelAnimationFrame(animationFrameId);
     }, []);
 
-    async function createGameSession() {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return router.push("/sign-in");
+    useEffect(() => {
+        if (!presentationId) return;
 
-        const pin = Math.floor(100000 + Math.random() * 900000).toString();
+        async function startLive() {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return router.push("/sign-in");
 
-        const { data, error } = await supabase.from("game_sessions").insert({
-            pin: pin,
-            teacher_id: user.id,
-            status: 'lobby',
-            game_mode: selectedMode
-        }).select().single();
+            const { data: pres } = await supabase.from("presentations").select("*").eq("id", presentationId).single();
+            if (!pres) return router.push("/teacher/library");
+            setPresentation(pres);
 
-        if (!error && data) {
-            setGamePin(pin);
-            subscribeToLobby(pin);
+            const { data: studentsData } = await supabase.from("children").select("id, full_name").eq("teacher_id", user.id);
+            if (studentsData) setAllStudents(studentsData);
+
+            await supabase.from("live_sessions").update({ is_active: false }).eq("teacher_id", user.id).eq("is_active", true);
+
+            const { data: session } = await supabase.from("live_sessions").insert({
+                teacher_id: user.id, presentation_id: pres.id, is_active: true, current_slide: 0
+            }).select().single();
+
+            if (session) {
+                setSessionId(session.id);
+
+                const attendChannel = supabase.channel(`attendance-${session.id}`)
+                    .on('postgres_changes', {
+                        event: '*', schema: 'public', table: 'live_attendance', filter: `session_id=eq.${session.id}`
+                    }, async () => {
+                        const { data } = await supabase.from("live_attendance").select("*").eq("session_id", session.id);
+                        if (data) setAttendance(data);
+                    }).subscribe();
+
+                const { data: initialAttend } = await supabase.from("live_attendance").select("*").eq("session_id", session.id);
+                if (initialAttend) setAttendance(initialAttend);
+
+                channelRef.current = supabase.channel(`live-room-${session.id}`).subscribe();
+            }
+            setLoading(false);
         }
+        startLive();
+
+        return () => {
+            if (channelRef.current) supabase.removeChannel(channelRef.current);
+        };
+    }, [presentationId, supabase, router]);
+
+    const handleSlideChange = async (newSlide: number) => {
+        if (!presentation.deck_data) return;
+        const maxSlides = presentation.deck_data.slides.length;
+        const target = Math.max(0, Math.min(newSlide, maxSlides - 1));
+
+        setCurrentSlide(target);
+        clearCanvas();
+        if (sessionId) await supabase.from("live_sessions").update({ current_slide: target }).eq("id", sessionId);
+    };
+
+    const handleMouseMove = (e: React.MouseEvent) => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
+
+        if (tool === 'laser') {
+            laserPoints.current.push({ x, y, life: 1.0 });
+            channelRef.current?.send({ type: 'broadcast', event: 'laser', payload: { x, y } });
+        }
+        if (tool === 'pen' && isDrawing) {
+            drawPen(e, rect);
+        }
+    };
+
+    const startDraw = (e: React.MouseEvent) => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        if (tool === 'pen') {
+            setIsDrawing(true);
+            const ctx = canvasRef.current?.getContext('2d');
+            if (ctx) {
+                ctx.beginPath();
+                ctx.arc(x, y, 2, 0, Math.PI * 2);
+                ctx.fillStyle = "#ef4444";
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+            }
+            channelRef.current?.send({ type: 'broadcast', event: 'dot', payload: { x: x / rect.width, y: y / rect.height } });
+        }
+        if (tool === 'text') {
+            const text = prompt("Enter text to display:");
+            if (text) {
+                const ctx = canvasRef.current?.getContext('2d');
+                if (ctx) {
+                    ctx.fillStyle = "#ef4444";
+                    ctx.font = "bold 30px Arial";
+                    ctx.fillText(text, x, y);
+                }
+                channelRef.current?.send({ type: 'broadcast', event: 'text', payload: { x: x / rect.width, y: y / rect.height, text } });
+            }
+        }
+    };
+
+    const drawPen = (e: React.MouseEvent, rect: DOMRect) => {
+        const ctx = canvasRef.current?.getContext('2d');
+        if (!ctx) return;
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        ctx.lineTo(x, y);
+        ctx.strokeStyle = "#ef4444";
+        ctx.lineWidth = 4;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.stroke();
+
+        channelRef.current?.send({ type: 'broadcast', event: 'draw', payload: { x: x / rect.width, y: y / rect.height } });
+    };
+
+    const stopDraw = () => setIsDrawing(false);
+
+    const clearCanvas = () => {
+        const ctx = canvasRef.current?.getContext('2d');
+        if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        channelRef.current?.send({ type: 'broadcast', event: 'clear' });
+    };
+
+    const endLiveSession = async () => {
+        if (!sessionId) return;
+        for (const sId of excusedIds) {
+            await supabase.from("live_attendance").update({ is_excused: true }).eq("session_id", sessionId).eq("student_id", sId);
+        }
+        await supabase.from("live_sessions").update({ is_active: false }).eq("id", sessionId);
+        router.push("/teacher/library");
+    };
+
+    if (loading || !presentation) {
+        return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
     }
 
-    function subscribeToLobby(pin: string) {
-        supabase
-            .channel(`lobby-${pin}`)
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'game_players',
-                filter: `game_pin=eq.${pin}`
-            }, (payload) => {
-                setPlayers(prev => [...prev, payload.new]);
-            })
-            .subscribe();
-    }
-
-    async function handleStartGame() {
-        if (players.length === 0) return alert("Wait for at least one student to join!");
-
-        setIsStarting(true);
-        await supabase.from("game_sessions").update({
-            status: 'playing',
-            game_mode: selectedMode
-        }).eq("pin", gamePin);
-
-        router.push(`/teacher/arena/host/${gamePin}`);
-    }
-
-    if (!gamePin) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">Starting Game Server...</div>;
+    const attendedIds = attendance.map((a: any) => a.student_id);
+    const absentStudents = allStudents.filter(s => !attendedIds.includes(s.id));
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-200 font-sans flex flex-col items-center justify-center p-8">
+        <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden relative select-none">
+            <div className="p-4 bg-red-600 text-white flex justify-between items-center z-50">
+                <div className="flex items-center gap-3 font-bold text-lg">
+                    <span className="relative flex h-3 w-3"><span className="animate-ping absolute h-full w-full rounded-full bg-white opacity-75"></span><span className="relative rounded-full h-3 w-3 bg-white"></span></span>
+                    LIVE: {presentation.title}
+                </div>
 
-            <Link href="/teacher" className="absolute top-8 left-8 flex items-center gap-2 text-slate-400 hover:text-white font-bold bg-slate-900 px-5 py-2.5 rounded-xl border border-slate-800">
-                <ArrowLeft size={20} /> Exit Game
-            </Link>
-
-            <div className="w-full max-w-5xl grid md:grid-cols-2 gap-12">
-
-                <div className="bg-slate-900 p-8 rounded-[2rem] border border-slate-800 shadow-2xl flex flex-col items-center text-center">
-                    <h1 className="text-3xl font-extrabold text-white mb-2">Join the Arena!</h1>
-                    <p className="text-slate-400 mb-6">Students go to the website and enter this PIN.</p>
-
-                    <div className="bg-slate-950 border-4 border-emerald-500 rounded-3xl px-12 py-6 mb-8 shadow-[0_0_50px_rgba(16,185,129,0.2)]">
-                        <span className="text-6xl md:text-7xl font-black text-white tracking-widest">{gamePin}</span>
-                    </div>
-
-                    <div className="w-full flex-1 bg-slate-950 rounded-2xl border border-slate-800 p-4 min-h-[300px]">
-                        <div className="flex items-center gap-2 text-slate-400 font-bold mb-4 border-b border-slate-800 pb-2">
-                            <Users size={18} /> Players Joined ({players.length})
+                <div className="flex items-center gap-4">
+                    {!presentation.file_url && presentation.deck_data?.slides && (
+                        <div className="flex gap-2 bg-black/30 p-2 rounded-xl">
+                            <button onClick={() => handleSlideChange(currentSlide - 1)} disabled={currentSlide === 0} className="p-2 rounded-lg hover:bg-white/20 disabled:opacity-30"><ArrowLeft size={20} /></button>
+                            <span className="font-bold text-sm flex items-center px-2">{currentSlide + 1} / {presentation.deck_data.slides.length}</span>
+                            <button onClick={() => handleSlideChange(currentSlide + 1)} disabled={currentSlide === presentation.deck_data.slides.length - 1} className="p-2 rounded-lg hover:bg-white/20 disabled:opacity-30"><ArrowRight size={20} /></button>
                         </div>
-                        <div className="flex flex-wrap gap-2 justify-center">
-                            {players.map((p, i) => (
-                                <div key={i} className="bg-slate-800 px-4 py-2 rounded-xl font-bold text-sm text-emerald-400 animate-in zoom-in duration-300">
-                                    {p.student_name}
-                                </div>
-                            ))}
-                            {players.length === 0 && <p className="text-slate-600 italic mt-10">Waiting for students...</p>}
-                        </div>
+                    )}
+
+                    <div className="flex gap-2 bg-black/30 p-2 rounded-xl">
+                        <button onClick={() => setTool('none')} className={`p-2 rounded-lg ${tool === 'none' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><MousePointer2 size={20} /></button>
+                        <button onClick={() => setTool('laser')} className={`p-2 rounded-lg ${tool === 'laser' ? 'bg-red-500 text-white' : 'hover:bg-white/20'}`}><div className="w-5 h-5 bg-red-400 rounded-full animate-pulse" /></button>
+                        <button onClick={() => setTool('pen')} className={`p-2 rounded-lg ${tool === 'pen' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><PenTool size={20} /></button>
+                        <button onClick={() => setTool('text')} className={`p-2 rounded-lg ${tool === 'text' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><Type size={20} /></button>
+                        <button onClick={clearCanvas} className="p-2 rounded-lg hover:bg-white/20 text-red-200"><Trash2 size={20} /></button>
                     </div>
                 </div>
 
-                <div className="flex flex-col justify-center space-y-6">
-                    <h2 className="text-2xl font-extrabold text-white flex items-center gap-2">
-                        <Gamepad2 className="text-indigo-400" /> Select Game Mode
-                    </h2>
-
-                    <div className="space-y-4">
-                        {GAME_MODES.map(mode => (
-                            <div
-                                key={mode.id}
-                                onClick={() => setSelectedMode(mode.id)}
-                                className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-4 ${selectedMode === mode.id
-                                        ? 'bg-slate-800 border-emerald-500 shadow-lg'
-                                        : 'bg-slate-900 border-slate-800 hover:border-slate-700'
-                                    }`}
-                            >
-                                <div className="p-3 bg-slate-950 rounded-xl">{mode.icon}</div>
-                                <div>
-                                    <h3 className="text-lg font-bold text-white">{mode.name}</h3>
-                                    <p className="text-sm text-slate-400 mt-1">{mode.desc}</p>
-                                </div>
-                            </div>
-                        ))}
+                <div className="flex items-center gap-4">
+                    <div className="bg-black/30 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2">
+                        <Users size={16} /> {attendance.length} Joined
                     </div>
-
-                    <button
-                        onClick={handleStartGame}
-                        disabled={isStarting || players.length === 0}
-                        className="w-full mt-4 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-black text-xl py-5 rounded-2xl shadow-xl shadow-emerald-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-3"
-                    >
-                        <Play size={24} /> Start Game!
+                    <button onClick={() => setShowEndModal(true)} className="bg-black/30 hover:bg-black/50 px-4 py-2 rounded-xl font-bold flex items-center gap-2">
+                        <StopCircle size={18} /> End
                     </button>
                 </div>
             </div>
+
+            <div
+                className="flex-1 overflow-hidden relative"
+                onMouseMove={handleMouseMove}
+                onMouseDown={startDraw}
+                onMouseUp={stopDraw}
+                onMouseLeave={stopDraw}
+                ref={containerRef}
+            >
+                {presentation.file_url ? (
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-white">
+                        <Download size={48} className="mb-4 text-emerald-400" />
+                        <h2 className="text-2xl font-bold mb-2">PowerPoint Presentation</h2>
+                        <p className="text-slate-400 mb-6 text-center max-w-md">Microsoft/Google viewer is loading. If it gets stuck, click below to view the file directly.</p>
+                        <a href={presentation.file_url} target="_blank" rel="noreferrer" className="bg-emerald-600 px-6 py-3 rounded-xl font-bold">Open File</a>
+                        <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(presentation.file_url)}`} className={`absolute inset-0 w-full h-full border-none ${tool === 'none' ? 'pointer-events-auto' : 'pointer-events-none'}`} />
+                    </div>
+                ) : (
+                    <DeckViewer deck={presentation.deck_data} externalSlide={currentSlide} onSlideChange={handleSlideChange} />
+                )}
+
+                <canvas ref={canvasRef} className="absolute inset-0 z-40 pointer-events-none" />
+                <canvas ref={laserCanvasRef} className="absolute inset-0 z-50 pointer-events-none" />
+            </div>
+
+            {showEndModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+                    <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-3xl shadow-2xl p-8">
+                        <h2 className="text-3xl font-extrabold text-white mb-2">End Live Session</h2>
+                        <p className="text-slate-400 mb-6">Review attendance.</p>
+
+                        <div className="grid md:grid-cols-2 gap-6 mb-8">
+                            <div className="bg-emerald-950/30 border border-emerald-900/50 rounded-2xl p-4">
+                                <h3 className="text-emerald-400 font-bold flex items-center gap-2 mb-4"><CheckCircle size={18} /> Attended ({attendance.length})</h3>
+                                <div className="space-y-2 max-h-40 overflow-y-auto">
+                                    {attendance.map((a: any) => (
+                                        <div key={a.student_id} className="bg-slate-950 p-2 rounded-lg text-sm text-slate-300">{a.student_name}</div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="bg-red-950/30 border border-red-900/50 rounded-2xl p-4">
+                                <h3 className="text-red-400 font-bold flex items-center gap-2 mb-4"><XCircle size={18} /> Absent ({absentStudents.length})</h3>
+                                <div className="space-y-2 max-h-40 overflow-y-auto">
+                                    {absentStudents.map((s: any) => (
+                                        <label key={s.id} className="flex items-center justify-between bg-slate-950 p-2 rounded-lg text-sm text-slate-300 cursor-pointer">
+                                            <span>{s.full_name}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-slate-500">Excuse?</span>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={excusedIds.includes(s.id)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) setExcusedIds(prev => [...prev, s.id]);
+                                                        else setExcusedIds(prev => prev.filter(id => id !== s.id));
+                                                    }}
+                                                    className="w-4 h-4 accent-emerald-500"
+                                                />
+                                            </div>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3">
+                            <button onClick={() => setShowEndModal(false)} className="px-6 py-3 rounded-xl font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
+                                Cancel
+                            </button>
+                            <button onClick={endLiveSession} className="bg-red-600 hover:bg-red-500 text-white font-bold px-8 py-3 rounded-xl shadow-lg transition-all">
+                                End & Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
