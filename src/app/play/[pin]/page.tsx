@@ -35,7 +35,6 @@ export default function PlayGame() {
         setStudentId(id);
         setStudentName(name);
 
-        // Join Lobby
         async function joinLobby() {
             await supabase.from("game_results").upsert({
                 game_pin: pin, student_id: id, student_name: name, score: 0
@@ -43,7 +42,6 @@ export default function PlayGame() {
         }
         joinLobby();
 
-        // Polling for Game Start & Game End
         const interval = setInterval(async () => {
             const { data } = await supabase.from("game_sessions").select("*").eq("pin", pin).single();
             if (data) {
@@ -62,9 +60,43 @@ export default function PlayGame() {
         return () => clearInterval(interval);
     }, [pin, supabase, status]);
 
-    // 🚨 Updates DB every time they get a point
     const handleScoreUpdate = async (newScore: number) => {
         await supabase.from("game_results").update({ score: newScore }).eq("game_pin", pin).eq("student_id", studentId);
+    };
+
+    // 🚨 TAKE GOLD (Steal from 1st place)
+    const handleTakeGold = async (percent: number, currentScore: number) => {
+        // Find the highest scorer (not ourselves)
+        const { data: topPlayers } = await supabase
+            .from("game_results")
+            .select("*")
+            .eq("game_pin", pin)
+            .neq("student_id", studentId)
+            .order("score", { ascending: false })
+            .limit(1);
+
+        if (topPlayers && topPlayers.length > 0) {
+            const victim = topPlayers[0];
+            const stealAmount = Math.floor(victim.score * (percent / 100));
+
+            // Deduct from victim
+            await supabase.from("game_results").update({ score: Math.max(0, victim.score - stealAmount) }).eq("id", victim.id);
+            // Add to self
+            return currentScore + stealAmount;
+        }
+        return currentScore;
+    };
+
+    // 🚨 DRAGON TREASURE (Steal from global pool)
+    const handleDragonTreasure = async (currentScore: number) => {
+        // We store the dragon pool in game_sessions
+        const { data: session } = await supabase.from("game_sessions").select("dragon_treasure").eq("pin", pin).single();
+        const pool = session?.dragon_treasure || 0;
+
+        // Reset the pool to 0
+        await supabase.from("game_sessions").update({ dragon_treasure: 0 }).eq("pin", pin);
+
+        return currentScore + pool;
     };
 
     const handleGameFinish = async () => {
@@ -72,7 +104,7 @@ export default function PlayGame() {
             const res = await fetch("/api/game/reward", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ studentId, score: 50 }) // Placeholder score for reward API
+                body: JSON.stringify({ studentId, score: 50 })
             });
             const data = await res.json();
             if (res.ok) setCoinsEarned(data.added);
@@ -112,7 +144,13 @@ export default function PlayGame() {
 
     return (
         <div className="h-screen w-screen overflow-hidden">
-            <TBAArena gameData={gameData} gameMode={gameMode} onScoreUpdate={handleScoreUpdate} />
+            <TBAArena
+                gameData={gameData}
+                gameMode={gameMode}
+                onScoreUpdate={handleScoreUpdate}
+                onTakeGold={handleTakeGold}
+                onDragonTreasure={handleDragonTreasure}
+            />
         </div>
     );
 }

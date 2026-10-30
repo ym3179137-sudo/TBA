@@ -1,17 +1,21 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Flame, Clock, Shield, Sparkles, EyeOff, Gift, Skull } from "lucide-react";
+import { Flame, Clock, Shield, Sparkles, EyeOff, Gift, Skull, Crown } from "lucide-react";
 
 export default function TBAArena({
     gameData,
     gameMode = "classic",
-    onScoreUpdate, // 🚨 New Prop: Sends score to DB
+    onScoreUpdate,
+    onTakeGold,
+    onDragonTreasure,
     isPreview = false
 }: {
     gameData: any,
     gameMode?: string,
     onScoreUpdate?: (score: number) => void,
+    onTakeGold?: (percent: number, currentScore: number) => Promise<number>,
+    onDragonTreasure?: (currentScore: number) => Promise<number>,
     isPreview?: boolean
 }) {
     const [currentQ, setCurrentQ] = useState(0);
@@ -19,14 +23,19 @@ export default function TBAArena({
     const [streak, setStreak] = useState(0);
     const [timeLeft, setTimeLeft] = useState(15);
 
+    // Abilities
     const [abilities, setAbilities] = useState({ timeFreeze: 1, doublePoints: 1, shield: 1 });
     const [activeEffect, setActiveEffect] = useState<string | null>(null);
     const [glitchScreen, setGlitchScreen] = useState(false);
 
+    // Chest Logic
+    const [showChests, setShowChests] = useState(false);
+    const [chestResult, setChestResult] = useState<any>(null);
+
+    // Anti-Cheat
     const [isTabHidden, setIsTabHidden] = useState(false);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Anti-Cheat
     useEffect(() => {
         if (isPreview) return;
         const handleVisibilityChange = () => setIsTabHidden(document.hidden);
@@ -41,7 +50,7 @@ export default function TBAArena({
 
     // Timer
     useEffect(() => {
-        if (!gameData || isTabHidden) return;
+        if (!gameData || isTabHidden || showChests) return; // Pause timer if choosing chest
         setTimeLeft(15);
         if (timerRef.current) clearInterval(timerRef.current);
         timerRef.current = setInterval(() => {
@@ -55,13 +64,13 @@ export default function TBAArena({
             });
         }, 1000);
         return () => { if (timerRef.current) clearInterval(timerRef.current); };
-    }, [currentQ, gameData, isTabHidden]);
+    }, [currentQ, gameData, isTabHidden, showChests]);
 
     if (!gameData || !gameData.questions) return null;
     const question = gameData.questions[currentQ];
 
     function useAbility(type: "timeFreeze" | "doublePoints" | "shield") {
-        if (abilities[type] <= 0 || isTabHidden) return;
+        if (abilities[type] <= 0 || isTabHidden || showChests) return;
         setAbilities(prev => ({ ...prev, [type]: prev[type] - 1 }));
         if (type === 'timeFreeze') { setTimeLeft(prev => prev + 10); setActiveEffect("TIME FROZEN! +10s"); }
         if (type === 'doublePoints') setActiveEffect("2x POINTS ACTIVE!");
@@ -69,13 +78,12 @@ export default function TBAArena({
         setTimeout(() => setActiveEffect(null), 2000);
     }
 
-    function handleAnswer(option: string | null) {
-        if (isTabHidden) return;
+    async function handleAnswer(option: string | null) {
+        if (isTabHidden || showChests) return;
         if (timerRef.current) clearInterval(timerRef.current);
 
         const isCorrect = option === question.correctAnswer;
         let points = 10;
-        let newScore = score;
 
         if (isCorrect) {
             let newStreak = streak + 1;
@@ -83,26 +91,15 @@ export default function TBAArena({
             if (activeEffect === "2x POINTS ACTIVE!") points = 20;
             if (newStreak >= 3) points += 10;
 
-            // 🚨 BLOOKET CHEST & SWAMP LOGIC
-            if (gameMode === 'gold_quest' && Math.random() > 0.6) {
-                const chestRoll = Math.random();
-                if (chestRoll > 0.8) {
-                    points = -50; // SWAMP!
-                    setActiveEffect("SWAMP! -50 PTS");
-                } else if (chestRoll > 0.4) {
-                    points = 100; // GOLD CHEST!
-                    setActiveEffect("GOLD CHEST! +100 PTS");
-                } else {
-                    points = 50; // SILVER CHEST
-                    setActiveEffect("CHEST! +50 PTS");
-                }
-                setTimeout(() => setActiveEffect(null), 2000);
-            }
-
-            newScore += points;
+            let newScore = score + points;
             setScore(newScore);
-            if (onScoreUpdate) onScoreUpdate(newScore); // 🚨 Update DB instantly
+            if (onScoreUpdate) onScoreUpdate(newScore);
 
+            // 🚨 Trigger Chests in Gold Quest
+            if (gameMode === 'gold_quest') {
+                setShowChests(true);
+                return; // Wait for chest selection before moving to next Q
+            }
         } else {
             if (activeEffect !== "SHIELD ACTIVE!") setStreak(0);
             if (gameMode === 'hacker') {
@@ -111,9 +108,58 @@ export default function TBAArena({
             }
         }
 
-        // 🚨 INFINITE LOOP
+        // Move to next question
         const nextQ = (currentQ + 1) % gameData.questions.length;
         setCurrentQ(nextQ);
+    }
+
+    // 🚨 Chest Logic
+    async function openChest(chestIndex: number) {
+        setShowChests(false);
+        const roll = Math.random();
+        let resultText = "";
+        let newScore = score;
+
+        if (roll < 0.1) {
+            // Dragon's Treasure
+            if (onDragonTreasure) newScore = await onDragonTreasure(score);
+            resultText = "DRAGON'S TREASURE!";
+            setActiveEffect(resultText);
+        } else if (roll < 0.25) {
+            // Take %
+            const percent = Math.random() > 0.5 ? 25 : 10;
+            if (onTakeGold) newScore = await onTakeGold(percent, score);
+            resultText = `STOLE ${percent}% OF 1ST PLACE!`;
+            setActiveEffect(resultText);
+        } else if (roll < 0.5) {
+            // Swamp
+            const loss = Math.floor(score * 0.25);
+            newScore = Math.max(0, score - loss);
+            resultText = `SWAMP! -${loss} PTS`;
+            setActiveEffect(resultText);
+        } else if (roll < 0.7) {
+            // Double
+            newScore = score * 2;
+            resultText = "DOUBLE GOLD!";
+            setActiveEffect(resultText);
+        } else {
+            // Gold
+            const bonus = Math.floor(Math.random() * 50) + 50;
+            newScore = score + bonus;
+            resultText = `+${bonus} GOLD!`;
+            setActiveEffect(resultText);
+        }
+
+        setScore(newScore);
+        if (onScoreUpdate) onScoreUpdate(newScore);
+        setChestResult(resultText);
+
+        setTimeout(() => {
+            setActiveEffect(null);
+            setChestResult(null);
+            const nextQ = (currentQ + 1) % gameData.questions.length;
+            setCurrentQ(nextQ);
+        }, 2500);
     }
 
     return (
@@ -127,19 +173,31 @@ export default function TBAArena({
             )}
 
             {activeEffect && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in zoom-in duration-200">
-                    <h2 className={`text-5xl md:text-7xl font-black drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] text-center px-4 ${activeEffect.includes("SWAMP") ? 'text-green-500' :
-                            activeEffect.includes("CHEST") ? 'text-yellow-400' : 'text-white'
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in zoom-in duration-200">
+                    <h2 className={`text-5xl md:text-8xl font-black drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] text-center px-4 ${activeEffect.includes("SWAMP") ? 'text-green-500' :
+                            activeEffect.includes("GOLD") || activeEffect.includes("TREASURE") ? 'text-yellow-400' : 'text-white'
                         }`}>
                         {activeEffect}
                     </h2>
                 </div>
             )}
 
+            {showChests && (
+                <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md animate-in zoom-in">
+                    <h2 className="text-4xl font-black text-amber-400 mb-12 animate-bounce">PICK A CHEST!</h2>
+                    <div className="flex gap-8">
+                        {[1, 2, 3].map((_, i) => (
+                            <button key={i} onClick={() => openChest(i)} className="w-32 h-32 bg-amber-600 hover:bg-amber-500 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.5)] transition-transform hover:scale-110 active:scale-95">
+                                <Gift size={64} className="text-white" />
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             <div className="flex justify-between items-center mb-6 z-10">
                 <div className="flex gap-3">
-                    <span className="text-sm font-bold bg-indigo-600 px-4 py-2 rounded-xl shadow-lg">Q {(currentQ % gameData.questions.length) + 1}</span>
-                    <span className="text-sm font-bold bg-emerald-600 px-4 py-2 rounded-xl shadow-lg">Score: {score}</span>
+                    <span className="text-sm font-bold bg-indigo-600 px-4 py-2 rounded-xl shadow-lg">Score: {score}</span>
                 </div>
                 {streak > 0 && (
                     <span className="flex items-center gap-1 text-orange-400 font-bold bg-orange-950 px-4 py-2 rounded-xl animate-pulse">
@@ -153,17 +211,14 @@ export default function TBAArena({
             </div>
 
             <div className="flex justify-center gap-4 mb-10 z-10">
-                <button onClick={() => useAbility('timeFreeze')} disabled={abilities.timeFreeze <= 0} className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all ${abilities.timeFreeze > 0 ? 'border-blue-500 bg-blue-900/50 hover:bg-blue-800 shadow-[0_0_15px_rgba(59,130,246,0.5)]' : 'border-slate-700 bg-slate-800 opacity-50'}`}>
+                <button onClick={() => useAbility('timeFreeze')} disabled={abilities.timeFreeze <= 0} className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all ${abilities.timeFreeze > 0 ? 'border-blue-500 bg-blue-900/50 hover:bg-blue-800' : 'border-slate-700 bg-slate-800 opacity-50'}`}>
                     <Clock className="w-6 h-6 text-blue-400 mb-1" />
-                    <span className="text-xs font-bold">Freeze ({abilities.timeFreeze})</span>
                 </button>
-                <button onClick={() => useAbility('doublePoints')} disabled={abilities.doublePoints <= 0} className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all ${abilities.doublePoints > 0 ? 'border-emerald-500 bg-emerald-900/50 hover:bg-emerald-800 shadow-[0_0_15px_rgba(16,185,129,0.5)]' : 'border-slate-700 bg-slate-800 opacity-50'}`}>
+                <button onClick={() => useAbility('doublePoints')} disabled={abilities.doublePoints <= 0} className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all ${abilities.doublePoints > 0 ? 'border-emerald-500 bg-emerald-900/50 hover:bg-emerald-800' : 'border-slate-700 bg-slate-800 opacity-50'}`}>
                     <Sparkles className="w-6 h-6 text-emerald-400 mb-1" />
-                    <span className="text-xs font-bold">2x Pts ({abilities.doublePoints})</span>
                 </button>
-                <button onClick={() => useAbility('shield')} disabled={abilities.shield <= 0} className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all ${abilities.shield > 0 ? 'border-purple-500 bg-purple-900/50 hover:bg-purple-800 shadow-[0_0_15px_rgba(168,85,247,0.5)]' : 'border-slate-700 bg-slate-800 opacity-50'}`}>
+                <button onClick={() => useAbility('shield')} disabled={abilities.shield <= 0} className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all ${abilities.shield > 0 ? 'border-purple-500 bg-purple-900/50 hover:bg-purple-800' : 'border-slate-700 bg-slate-800 opacity-50'}`}>
                     <Shield className="w-6 h-6 text-purple-400 mb-1" />
-                    <span className="text-xs font-bold">Shield ({abilities.shield})</span>
                 </button>
             </div>
 
