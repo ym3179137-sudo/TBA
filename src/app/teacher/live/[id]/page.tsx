@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import DeckViewer from "@/components/DeckViewer";
-import { StopCircle, Loader2, MousePointer2, PenTool, Trash2, Type, Users, CheckCircle, XCircle, ArrowLeft, ArrowRight } from "lucide-react";
+import { StopCircle, Loader2, MousePointer2, PenTool, Trash2, Type, Users, CheckCircle, XCircle, ArrowLeft, ArrowRight, Download } from "lucide-react";
 
 export default function TeacherLivePresenter() {
     const router = useRouter();
@@ -25,13 +25,11 @@ export default function TeacherLivePresenter() {
     const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
-    // 🚨 Attendance State
-    const [attendance, setAttendance] = useState<any[]>([]); // 🚨 Read from DB
+    const [attendance, setAttendance] = useState<any[]>([]);
     const [allStudents, setAllStudents] = useState<any[]>([]);
     const [showEndModal, setShowEndModal] = useState(false);
     const [excusedIds, setExcusedIds] = useState<string[]>([]);
 
-    // Fix Canvas Sizing
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
@@ -45,7 +43,6 @@ export default function TeacherLivePresenter() {
         return () => window.removeEventListener('resize', updateSize);
     }, [loading]);
 
-    // Smooth Laser Trace
     const laserPoints = useRef<{ x: number; y: number; life: number }[]>([]);
     useEffect(() => {
         let animationFrameId: number;
@@ -99,22 +96,23 @@ export default function TeacherLivePresenter() {
             if (session) {
                 setSessionId(session.id);
 
-                // 🚨 Listen to Attendance Table for late joiners
-                const attendChannel = supabase.channel(`attendance-${session.id}`)
-                    .on('postgres_changes', {
-                        event: '*', schema: 'public', table: 'live_attendance', filter: `session_id=eq.${session.id}`
-                    }, async () => {
-                        // Re-fetch the entire list whenever someone joins
-                        const { data } = await supabase.from("live_attendance").select("*").eq("session_id", session.id);
-                        if (data) setAttendance(data);
-                    }).subscribe();
+                // 🚨 Setup Presence Tracking for Teacher
+                channelRef.current = supabase.channel(`live-room-${session.id}`, {
+                    config: { presence: { key: `teacher-${user.id}` } }
+                });
 
-                // Fetch initial attendance
-                const { data: initialAttend } = await supabase.from("live_attendance").select("*").eq("session_id", session.id);
-                if (initialAttend) setAttendance(initialAttend);
-
-                // Setup realtime broadcast for drawing
-                channelRef.current = supabase.channel(`live-room-${session.id}`).subscribe();
+                channelRef.current
+                    .on('presence', { event: 'sync' }, () => {
+                        const state = channelRef.current.presenceState();
+                        const users = Object.values(state).flat();
+                        const students = users.filter((u: any) => u.role === 'student');
+                        setAttendance(students);
+                    })
+                    .subscribe(async (status: string) => {
+                        if (status === 'SUBSCRIBED') {
+                            await channelRef.current.track({ role: 'teacher', name: 'Teacher' });
+                        }
+                    });
             }
             setLoading(false);
         }
@@ -132,6 +130,14 @@ export default function TeacherLivePresenter() {
 
         setCurrentSlide(target);
         clearCanvas();
+
+        // 🚨 Broadcast slide change to students instantly
+        channelRef.current?.send({
+            type: 'broadcast',
+            event: 'slide_change',
+            payload: { slide: target }
+        });
+
         if (sessionId) await supabase.from("live_sessions").update({ current_slide: target }).eq("id", sessionId);
     };
 
@@ -210,11 +216,16 @@ export default function TeacherLivePresenter() {
     const endLiveSession = async () => {
         if (!sessionId) return;
 
-        // 🚨 Update excuses in DB
-        for (const sId of excusedIds) {
-            await supabase.from("live_attendance").update({ is_excused: true }).eq("session_id", sessionId).eq("student_id", sId);
-        }
+        const presentIds = attendance.map((a: any) => a.key);
+        const records = allStudents.map(s => ({
+            session_id: sessionId,
+            student_id: s.id,
+            student_name: s.full_name,
+            is_present: presentIds.includes(s.id),
+            is_excused: excusedIds.includes(s.id)
+        }));
 
+        await supabase.from("live_attendance").insert(records);
         await supabase.from("live_sessions").update({ is_active: false }).eq("id", sessionId);
         router.push("/teacher/library");
     };
@@ -223,10 +234,7 @@ export default function TeacherLivePresenter() {
         return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
     }
 
-    // 🚨 Attended list comes from the DB (so late joiners are included)
-    const attendedIds = attendance.map((a: any) => a.student_id);
-    // Absent list is everyone else
-    const absentStudents = allStudents.filter(s => !attendedIds.includes(s.id));
+    const absentStudents = allStudents.filter(s => !attendance.some((a: any) => a.key === s.id));
 
     return (
         <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden relative select-none">
@@ -286,14 +294,14 @@ export default function TeacherLivePresenter() {
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
                     <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-3xl shadow-2xl p-8">
                         <h2 className="text-3xl font-extrabold text-white mb-2">End Live Session</h2>
-                        <p className="text-slate-400 mb-6">Review attendance. Late joiners are marked as attended.</p>
+                        <p className="text-slate-400 mb-6">Review attendance.</p>
 
                         <div className="grid md:grid-cols-2 gap-6 mb-8">
                             <div className="bg-emerald-950/30 border border-emerald-900/50 rounded-2xl p-4">
                                 <h3 className="text-emerald-400 font-bold flex items-center gap-2 mb-4"><CheckCircle size={18} /> Attended ({attendance.length})</h3>
                                 <div className="space-y-2 max-h-40 overflow-y-auto">
                                     {attendance.map((a: any) => (
-                                        <div key={a.student_id} className="bg-slate-950 p-2 rounded-lg text-sm text-slate-300">{a.student_name}</div>
+                                        <div key={a.key} className="bg-slate-950 p-2 rounded-lg text-sm text-slate-300">{a.name}</div>
                                     ))}
                                     {attendance.length === 0 && <p className="text-slate-500 text-sm">No one joined.</p>}
                                 </div>
@@ -319,7 +327,6 @@ export default function TeacherLivePresenter() {
                                             </div>
                                         </label>
                                     ))}
-                                    {absentStudents.length === 0 && <p className="text-slate-500 text-sm">Everyone attended!</p>}
                                 </div>
                             </div>
                         </div>
@@ -329,7 +336,7 @@ export default function TeacherLivePresenter() {
                                 Cancel
                             </button>
                             <button onClick={endLiveSession} className="bg-red-600 hover:bg-red-500 text-white font-bold px-8 py-3 rounded-xl shadow-lg transition-all">
-                                End & Save Attendance
+                                End & Save
                             </button>
                         </div>
                     </div>

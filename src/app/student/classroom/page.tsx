@@ -16,7 +16,6 @@ export default function StudentClassroom() {
     const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
-    // 🚨 Fix Canvas Sizing
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
@@ -30,7 +29,6 @@ export default function StudentClassroom() {
         return () => window.removeEventListener('resize', updateSize);
     }, [loading]);
 
-    // Smooth Laser Trace
     const laserPoints = useRef<{ x: number; y: number; life: number }[]>([]);
     useEffect(() => {
         let animationFrameId: number;
@@ -78,47 +76,13 @@ export default function StudentClassroom() {
                 if (pres) {
                     setLiveData({ ...data[0], presentation: pres });
                     subscribeToChannel(data[0].id, studentId, studentName);
-
-                    // 🚨 LOG ATTENDANCE (Late joiners are tracked here too)
-                    await supabase.from("live_attendance").upsert({
-                        session_id: data[0].id,
-                        student_id: studentId,
-                        student_name: studentName
-                    }, { onConflict: 'session_id,student_id' });
                 }
             }
             setLoading(false);
         }
         checkInitialSession();
 
-        const dbChannel = supabase.channel('live-db-changes')
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'live_sessions' }, async (payload) => {
-                const session = payload.new as any;
-                if (session.is_active) {
-                    const { data: pres } = await supabase.from("presentations").select("deck_data, title, file_url").eq("id", session.presentation_id).single();
-                    if (pres) {
-                        setLiveData({ ...session, presentation: pres });
-                        if (!channelRef.current) {
-                            subscribeToChannel(session.id, studentId, studentName);
-                            // Log attendance if they join mid-session
-                            await supabase.from("live_attendance").upsert({
-                                session_id: session.id,
-                                student_id: studentId,
-                                student_name: studentName
-                            }, { onConflict: 'session_id,student_id' });
-                        }
-                    }
-                } else {
-                    setLiveData(null);
-                    if (channelRef.current) {
-                        supabase.removeChannel(channelRef.current);
-                        channelRef.current = null;
-                    }
-                }
-            }).subscribe();
-
         return () => {
-            supabase.removeChannel(dbChannel);
             if (channelRef.current) supabase.removeChannel(channelRef.current);
         };
     }, [supabase]);
@@ -132,6 +96,13 @@ export default function StudentClassroom() {
 
         channelRef.current
             .on('presence', { event: 'sync' }, () => { })
+            // 🚨 LISTEN FOR SLIDE CHANGE
+            .on('broadcast', { event: 'slide_change' }, (payload: any) => {
+                setLiveData((prev: any) => ({ ...prev, current_slide: payload.payload.slide }));
+                // Clear local drawings when teacher changes slide
+                const ctx = canvasRef.current?.getContext('2d');
+                if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            })
             .on('broadcast', { event: 'laser' }, (payload: any) => {
                 laserPoints.current.push({ x: payload.payload.x, y: payload.payload.y, life: 1.0 });
             })
