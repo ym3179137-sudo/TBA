@@ -1,65 +1,66 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Flame, Clock, Shield, Sparkles, EyeOff, Terminal, Fingerprint, Lock, CheckCircle, AlertTriangle, Cpu } from "lucide-react";
+import { Flame, Clock, Shield, Sparkles, EyeOff, Rocket, Key, Lock, Unlock, Zap, Star } from "lucide-react";
 
-// 🚨 THE MASSIVE PASSWORD POOL (100+ Hacker Style)
+// 🚨 100+ FUN, KID-FRIENDLY SECRET CODES
 const ALL_PASSWORDS = [
-    "C0DEBUSTER", "N30N_V1P3R", "M4TR1X_RUN", "SYST3M_0V3R", "Z3R0_TR4C3",
-    "GH0ST_PR0T0", "BYT3_M3", "R00T_ACC3SS", "P4CK3T_L0SS", "B1N4RY_B0T",
-    "D4TA_D00R", "CYB3R_PUNK", "V1RTU4L_V01D", "TR0J4N_H0RS3", "F1R3W4LL_X",
-    "P4SSW0RD_99", "L0G1C_B0MB", "QU4NTUM_L34P", "M4LW4R3_X", "K3RN3L_P4N1C",
-    "SCR1PT_K1DD13", "R4ND0M_4CC3SS", "D33P_W3B", "BL4CK_H4T", "WH1T3_H4T",
-    "ZER0_D4Y", "P4TCH_N0T3", "B4CK_D00R", "CRYPT0_K3Y", "H4SH_T4BL3",
-    "N0D3_JS", "P1NG_P0NG", "P4CK3T_SN1FF", "B1T_C01N", "M3M0RY_L34K",
-    "ST4CK_0V3R", "BUFF3R_RUN", "D4T4_B4S3", "CL0UD_N1N3", "S3RV3R_R00M",
-    "L0G1N_F41L", "T0K3N_B0T", "SP4M_F1LT3R", "V1RU5_SC4N", "M4LW4R3_BYT3",
-    "S3CUR3_S0CK3T", "PR0XY_S3RV3R", "F1NG3R_PR1NT", "B10M3TR1C", "P4SSK3Y_M4ST3R",
-    "S3CR3T_AG3NT", "SPY_C4M", "D4TA_M1N3R", "N3TW0RK_C4RD", "H4CK3R_M4N",
-    "CYB3R_SP4C3", "D1G1T4L_F00T", "R0B0T_B0T", "L4S3R_B34M", "S4T3LL1T3_L1NK",
-    "B4CKUP_D1SK", "CL1CK_B41T", "T3RM1N4L_X", "C0D3_R3D", "M4TR1X_Z0N3",
-    "N30N_R41N", "GL1TCH_H4PP3N", "L0G1C_G4T3", "P1X3L_P3RF3CT", "R3TR0_G4M3R",
-    "T1M3_TR4V3L", "D4T4_FL0W", "S3RV3R_L0G", "R00T_US3R", "4DM1N_P4N3L",
-    "P4SSW0RD_123", "H4SH_T4G", "C0D3_BR3AK3R", "Z3R0_BYT3", "B1N4RY_B3AST",
-    "M4CH1N3_L3RN", "4RT1F1C1AL_1Q", "R0B0T1C_4RM", "L4S3R_P01NT3R", "DIG1T4L_S1GN",
-    "V1RTU4L_R34L", "N3UR4L_N3T", "D4T4_SCR4P3", "P4CK3T_R0UT3", "F1R3W4LL_BL0CK",
-    "S3CUR3_TUNN3L", "3NCRYPT10N_K3Y", "D3CRYPT_D4T4", "R4ND0M_S33D", "H4CK3R_T00L",
-    "P3N3TR4T10N", "VULN3R4B1L1TY", "3XPL01T_D4T4", "M4L1C10US_C0D3", "B4CK_D00R_99",
-    "SPY_W4R3", "K3YL0GG3R_B0T", "D3N14L_0F_S3RV1C3"
+    "PIZZA-PARTY", "ROCKET-SHIP", "NEON-CAT", "DINO-ROAR", "SUPER-HERO",
+    "JELLY-BEAN", "ICE-CREAM", "MOON-BOUNCE", "TURBO-SNAIL", "MEGA-CHEESE",
+    "STAR-POWER", "GALAXY-QUEST", "SPACE-MONKEY", "ALIEN-FRIEND", "ROBOT-DANCE",
+    "PIXEL-POWER", "RAINBOW-DASH", "CANDY-CRUSH", "SUPER-NOVA", "LASER-BEAM",
+    "MAGIC-WAND", "DRAGON-FLY", "PIRATE-GOLD", "NINJA-TURTLE", "UNICORN-HORN",
+    "BUBBLE-GUM", "FLYING-SAUCER", "PLANET-MARS", "COMET-STRIKE", "ASTRO-BLAST",
+    "METEOR-SHOWER", "BLACK-HOLE", "WARP-SPEED", "TIME-TRAVEL", "HYPER-SPACE",
+    "ZERO-GRAVITY", "SPACE-STATION", "LUNAR-MOON", "SUN-FLARE", "STAR-DUST",
+    "COSMIC-WAVE", "NEBULA-CLOUD", "GALAXY-CORE", "QUASAR-BEAM", "PULSAR-STAR",
+    "NEUTRON-BOMB", "SUPER-MASSIVE", "DARK-MATTER", "LIGHT-YEAR", "SOLAR-WIND",
+    "ORBIT-SPIN", "GRAVITY-PULL", "ECLIPSE-SHADOW", "CRATER-LAKE", "RING-PLANET",
+    "MOON-WALK", "SPACE-SUIT", "HELMET-VISOR", "OXYGEN-TANK", "FUEL-CELL",
+    "JET-PACK", "ROCKET-BOOST", "TURBO-ENGINE", "WARP-DRIVE", "ION-THRUSTER",
+    "PLASMA-CANNON", "LASER-SWORD", "PHASER-GUN", "ENERGY-SHIELD", "FORCE-FIELD",
+    "CLOAKING-DEVICE", "TELEPORTER", "TRANSPORTER", "REPLICATOR", "HOLOGRAM",
+    "VIRTUAL-REALITY", "CYBER-SPACE", "DIGITAL-WORLD", "MATRIX-GLITCH", "PIXEL-ART",
+    "CODE-BREAKER", "FIREWALL", "ANTI-VIRUS", "ENCRYPTION", "DECRYPTION",
+    "ALGORITHM", "BINARY-CODE", "HARD-DRIVE", "SOFTWARE", "HARDWARE",
+    "PROCESSOR", "GRAPHICS-CARD", "MEMORY-RAM", "POWER-SUPPLY", "MOTHERBOARD",
+    "KEYBOARD", "MOUSE-CLICK", "MONITOR-SCREEN", "SPEAKER-SOUND", "MICROPHONE",
+    "HEADPHONES", "WEB-CAMERA", "PRINTER-INK", "SCANNER-LIGHT", "ROUTER-WIFI",
+    "INTERNET", "WEBSITE", "BROWSER", "SEARCH-ENGINE", "EMAIL-INBOX",
+    "MESSAGE-CHAT", "VIDEO-CALL", "SOCIAL-MEDIA", "ONLINE-GAME", "CLOUD-STORAGE",
+    "DATA-BASE", "SERVER-ROOM", "NETWORK", "SECURITY", "PASSWORD"
 ];
 
 const PALS = [
-    { id: "junkbit", name: "Junkbit", emoji: "🗑️", effect: "nothing", weight: 3, desc: "Corrupted data. Nothing gained." },
-    { id: "pip", name: "Pip", emoji: "🐣", effect: "add", amount: 10, weight: 4, desc: "+10 Credits extracted." },
-    { id: "munch", name: "Munch", emoji: "🟢", effect: "add", amount: 20, weight: 15, desc: "+20 Credits extracted." },
-    { id: "bounce", name: "Bounce", emoji: "🟡", effect: "add", amount: 30, weight: 15, desc: "+30 Credits extracted." },
-    { id: "nimbus", name: "Nimbus", emoji: "☁️", effect: "add", amount: 50, weight: 14, desc: "+50 Credits extracted." },
-    { id: "twin", name: "Twin", emoji: "👯", effect: "double", weight: 9, desc: "DOUBLE YOUR CREDITS!" },
-    { id: "trine", name: "Trine", emoji: "💎", effect: "triple", weight: 5, desc: "TRIPLE YOUR CREDITS!" },
-    { id: "rift", name: "Rift", emoji: "🌀", effect: "hack", weight: 9, desc: "EXPLOIT FOUND. Trigger a hack." },
+    { id: "glitch", name: "Glitch", emoji: "👾", effect: "nothing", weight: 3, desc: "Broken data. Nothing gained." },
+    { id: "pip", name: "Pip", emoji: "🐣", effect: "add", amount: 10, weight: 4, desc: "+10 Stardust collected." },
+    { id: "munch", name: "Munch", emoji: "🟢", effect: "add", amount: 20, weight: 15, desc: "+20 Stardust collected." },
+    { id: "bounce", name: "Bounce", emoji: "🟡", effect: "add", amount: 30, weight: 15, desc: "+30 Stardust collected." },
+    { id: "nimbus", name: "Nimbus", emoji: "☁️", effect: "add", amount: 50, weight: 14, desc: "+50 Stardust collected." },
+    { id: "twin", name: "Twin", emoji: "👯", effect: "double", weight: 9, desc: "DOUBLE YOUR STARDUST!" },
+    { id: "trine", name: "Trine", emoji: "💎", effect: "triple", weight: 5, desc: "TRIPLE YOUR STARDUST!" },
+    { id: "rift", name: "Rift", emoji: "🌀", effect: "hack", weight: 9, desc: "WORMHOLE OPENED. Raid a player!" },
 ];
 
 export default function TBAArena({
     gameData, gameMode, onScoreUpdate, onGameEnd, isPreview
 }: any) {
-    // If gameMode is 'hacker', render the CyberHack component
     if (gameMode === 'hacker') {
-        return <CyberHackArena gameData={gameData} onScoreUpdate={onScoreUpdate} onGameEnd={onGameEnd} isPreview={isPreview} />;
+        return <StarVaultArena gameData={gameData} onScoreUpdate={onScoreUpdate} onGameEnd={onGameEnd} isPreview={isPreview} />;
     }
-
-    // Otherwise, render the Classic Mode
     return <ClassicArena gameData={gameData} onScoreUpdate={onScoreUpdate} onGameEnd={onGameEnd} isPreview={isPreview} />;
 }
 
 // ==========================================
-// 🚨 CYBER HACK (HACKER MODE)
+// 🚨 STAR VAULT (KID-FRIENDLY HACKER MODE)
 // ==========================================
-function CyberHackArena({ gameData, onScoreUpdate, onGameEnd }: any) {
+function StarVaultArena({ gameData, onScoreUpdate, onGameEnd }: any) {
     const [currentQ, setCurrentQ] = useState(0);
     const [score, setScore] = useState(0);
     const [answersLog, setAnswersLog] = useState<any[]>([]);
     const [phase, setPhase] = useState<"password_select" | "question" | "reward" | "hack" | "hacked">("password_select");
 
+    const [secretPassword, setSecretPassword] = useState("");
     const [selectedPasswords, setSelectedPasswords] = useState<string[]>([]);
     const [rolledPal, setRolledPal] = useState<any>(null);
     const [hackOptions, setHackOptions] = useState<string[]>([]);
@@ -96,7 +97,6 @@ function CyberHackArena({ gameData, onScoreUpdate, onGameEnd }: any) {
 
     const applyReward = () => {
         if (rolledPal.effect === "hack") {
-            // Pick 3 random passwords for the hack screen
             const options = [...ALL_PASSWORDS].sort(() => 0.5 - Math.random()).slice(0, 3);
             setHackOptions(options);
             setPhase("hack");
@@ -133,34 +133,43 @@ function CyberHackArena({ gameData, onScoreUpdate, onGameEnd }: any) {
     };
 
     const moveToNextQuestion = () => {
-        if (currentQ + 1 >= gameData.questions.length) {
-            if (onGameEnd) onGameEnd(answersLog);
-        } else {
-            setCurrentQ(currentQ + 1);
-            setPhase("question");
-            setHackResult(null);
-            setRolledPal(null);
-            setPatchClicks(0);
-        }
+        // 🚨 FIX: Loops questions continuously so it never gets stuck
+        const nextQ = (currentQ + 1) % gameData.questions.length;
+        setCurrentQ(nextQ);
+        setPhase("question");
+        setHackResult(null);
+        setRolledPal(null);
+        setPatchClicks(0);
     };
 
     return (
-        <div className="relative flex flex-col items-center justify-center min-h-screen bg-black p-6 font-mono overflow-hidden text-green-500">
-            <div className="crt-overlay" />
+        <div className="relative flex flex-col items-center justify-center min-h-screen bg-[#0a0514] p-6 font-sans overflow-hidden text-cyan-400">
+            {/* Background Stars */}
+            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30 pointer-events-none"></div>
+            <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-purple-900/20 to-transparent pointer-events-none"></div>
 
-            {/* PHASE: PASSWORD SELECT */}
+            {/* Show Secret Code Header */}
+            {phase !== "password_select" && (
+                <div className="absolute top-6 left-6 bg-black/50 border border-cyan-800 px-6 py-3 rounded-2xl flex items-center gap-3 shadow-[0_0_20px_rgba(6,182,212,0.3)] z-50">
+                    <Key className="w-5 h-5 text-amber-400" />
+                    <span className="text-slate-300 font-bold">Your Secret Code:</span>
+                    <span className="text-amber-400 font-black tracking-widest">{secretPassword}</span>
+                </div>
+            )}
+
+            {/* PHASE: SECRET CODE SELECT */}
             {phase === "password_select" && (
-                <div className="z-10 flex flex-col items-center w-full max-w-3xl animate-in zoom-in">
-                    <Fingerprint className="w-24 h-24 mb-6 animate-pulse text-green-500" />
-                    <h1 className="text-4xl md:text-5xl font-black mb-2 text-green-400 glitch-text text-center" data-text="ENCRYPT YOUR VAULT">
-                        ENCRYPT YOUR VAULT
+                <div className="z-10 flex flex-col items-center w-full max-w-4xl animate-in zoom-in">
+                    <Rocket className="w-24 h-24 mb-6 text-purple-400 animate-bounce" />
+                    <h1 className="text-4xl md:text-5xl font-black mb-4 text-white text-center drop-shadow-[0_0_15px_rgba(168,85,247,0.5)]">
+                        SECURE YOUR STAR VAULT
                     </h1>
-                    <p className="text-green-700 mb-10 text-center max-w-lg">
-                        Select one passkey from the 5 generated below. If an enemy breaches your firewall, they must guess this exact key.
+                    <p className="text-slate-400 mb-10 text-center max-w-lg text-lg">
+                        Choose a Secret Code. If an alien tries to raid your vault, they have to guess this exact code!
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-4 w-full">
                         {selectedPasswords.map(pass => (
-                            <button key={pass} onClick={() => setPhase("question")} className="bg-black border-2 border-green-800 hover:border-green-400 hover:bg-green-900/20 hover:text-green-300 text-green-600 font-bold py-4 rounded transition-all duration-200 shadow-[0_0_10px_rgba(34,197,94,0.1)] hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] text-sm">
+                            <button key={pass} onClick={() => { setSecretPassword(pass); setPhase("question"); }} className="bg-slate-900 border-2 border-purple-700 hover:border-cyan-400 hover:bg-purple-900/40 text-cyan-300 font-bold py-4 rounded-xl transition-all duration-200 shadow-[0_0_15px_rgba(168,85,247,0.2)] hover:shadow-[0_0_25px_rgba(6,182,212,0.5)] text-sm hover:-translate-y-1">
                                 {pass}
                             </button>
                         ))}
@@ -170,36 +179,37 @@ function CyberHackArena({ gameData, onScoreUpdate, onGameEnd }: any) {
 
             {/* PHASE: QUESTION */}
             {phase === "question" && (
-                <div className="w-full max-w-4xl z-10 animate-in fade-in">
-                    <div className="flex justify-between items-center mb-8 border-b border-green-900 pb-4">
-                        <span className="text-green-500 font-bold flex items-center gap-2 animate-pulse"><Terminal size={18} /> DATA_MINING_PHASE</span>
-                        <span className="text-cyan-400 font-bold text-xl flex items-center gap-2"><Cpu size={18} /> {score} CR</span>
+                <div className="w-full max-w-4xl z-10 animate-in fade-in slide-in-from-bottom-5">
+                    <div className="flex justify-between items-center mb-8 bg-slate-900/80 border border-slate-700 p-4 rounded-2xl shadow-lg">
+                        <span className="text-cyan-400 font-bold flex items-center gap-2"><Star className="w-5 h-5 fill-cyan-400" /> STARDUST COLLECTED</span>
+                        <span className="text-amber-400 font-black text-2xl flex items-center gap-2"><Sparkles size={24} /> {score}</span>
                     </div>
 
-                    <h2 className="text-2xl md:text-3xl font-bold text-green-300 text-center mb-8">{question.prompt}</h2>
+                    <div className="bg-slate-900/90 border border-slate-700 p-8 rounded-3xl shadow-2xl backdrop-blur-md">
+                        <h2 className="text-3xl font-bold text-white text-center mb-8">{question.prompt}</h2>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {question.options.map((opt: string, i: number) => (
-                            <button key={i} onClick={() => handleAnswer(opt)} className="bg-black border border-green-800 hover:bg-green-900/40 text-green-400 font-bold py-6 rounded text-xl transition-all hover:shadow-[0_0_15px_rgba(34,197,94,0.5)] group relative overflow-hidden">
-                                <span className="relative z-10">{opt}</span>
-                                <div className="absolute inset-0 bg-green-500/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                            </button>
-                        ))}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {question.options.map((opt: string, i: number) => (
+                                <button key={i} onClick={() => handleAnswer(opt)} className="bg-indigo-900/50 border-2 border-indigo-600 hover:border-cyan-400 hover:bg-indigo-800 text-white font-bold py-6 rounded-2xl text-xl transition-all hover:scale-105 hover:shadow-[0_0_20px_rgba(6,182,212,0.4)]">
+                                    {opt}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
             )}
 
             {/* PHASE: REWARD */}
             {phase === "reward" && (
-                <div className="bg-black border-2 border-green-500 rounded-lg p-10 text-center max-w-md w-full shadow-[0_0_50px_rgba(34,197,94,0.3)] z-10 animate-in zoom-in duration-300">
-                    <h2 className="text-green-700 mb-4 uppercase tracking-[0.2em]">Data Packet Decrypted</h2>
-                    <div className="text-8xl mb-6 animate-bounce">{rolledPal.emoji}</div>
-                    <h1 className="text-4xl font-black text-green-400 mb-2 glitch-text" data-text={rolledPal.name}>{rolledPal.name}</h1>
-                    <p className="text-cyan-400 font-bold text-lg mb-8 border border-cyan-900 bg-cyan-950/30 p-2 rounded">
+                <div className="bg-slate-900 border-2 border-cyan-500 rounded-3xl p-10 text-center max-w-md w-full shadow-[0_0_60px_rgba(6,182,212,0.3)] z-10 animate-in zoom-in duration-300">
+                    <h2 className="text-purple-400 mb-4 font-bold tracking-widest uppercase">Alien Pod Opened!</h2>
+                    <div className="text-8xl mb-6 animate-bounce drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]">{rolledPal.emoji}</div>
+                    <h1 className="text-4xl font-black text-white mb-2">{rolledPal.name}</h1>
+                    <p className="text-amber-300 font-bold text-lg mb-8 bg-amber-900/30 p-3 rounded-xl border border-amber-700/50">
                         {rolledPal.desc}
                     </p>
-                    <button onClick={applyReward} className={`w-full bg-green-900 text-green-300 hover:bg-green-500 hover:text-black font-black py-4 rounded text-lg border-2 transition-all uppercase tracking-widest ${rolledPal.effect === 'hack' ? 'border-red-500 text-red-500 hover:bg-red-500' : 'border-green-500'}`}>
-                        {rolledPal.effect === 'hack' ? "EXECUTE EXPLOIT" : "EXTRACT DATA"}
+                    <button onClick={applyReward} className="w-full bg-cyan-600 text-white hover:bg-cyan-500 font-black py-4 rounded-2xl text-lg transition-all shadow-[0_0_20px_rgba(6,182,212,0.4)] active:scale-95">
+                        {rolledPal.effect === 'hack' ? "RAID A PLAYER" : "COLLECT STARDUST"}
                     </button>
                 </div>
             )}
@@ -207,42 +217,40 @@ function CyberHackArena({ gameData, onScoreUpdate, onGameEnd }: any) {
             {/* PHASE: HACK */}
             {phase === "hack" && (
                 <div className="z-10 flex flex-col items-center w-full max-w-md animate-in slide-in-from-bottom-10">
-                    <Fingerprint className="w-20 h-20 mb-4 text-red-500 animate-pulse" />
-                    <h1 className="text-3xl font-black mb-2 text-red-500 glitch-text text-center" data-text="BREACHING FIREWALL">BREACHING FIREWALL</h1>
-                    <p className="text-green-700 mb-8 text-center text-sm">
-                        &gt; Bypassing security protocols...<br />
-                        &gt; Target: Operative #4082<br />
-                        &gt; Select correct passkey to steal 25% Credits.
+                    <Unlock className="w-20 h-20 mb-4 text-red-400 animate-pulse" />
+                    <h1 className="text-3xl font-black mb-2 text-white text-center">CRACKING THEIR VAULT</h1>
+                    <p className="text-cyan-300 mb-8 text-center text-sm bg-cyan-950/50 p-4 rounded-xl border border-cyan-800">
+                        You found a wormhole! Select the correct Secret Code to steal 25% of their Stardust.
                     </p>
 
                     {!hackResult ? (
                         <div className="flex flex-col gap-3 w-full">
                             {hackOptions.map(opt => (
-                                <button key={opt} onClick={() => submitHack(opt)} className="bg-black border border-green-800 text-green-500 font-bold py-4 rounded hover:bg-green-900/30 hover:text-green-300 transition-all text-left px-6">
-                                    &gt; INPUT_KEY: {opt}
+                                <button key={opt} onClick={() => submitHack(opt)} className="bg-slate-900 border-2 border-purple-700 text-cyan-300 font-bold py-4 rounded-xl hover:bg-purple-900/40 transition-all text-center tracking-widest">
+                                    {opt}
                                 </button>
                             ))}
-                            <button onClick={() => setHackResult("fail")} className="text-slate-600 hover:text-red-500 mt-6 text-sm text-center">
-                                [ ABORT SEQUENCE ]
+                            <button onClick={() => setHackResult("fail")} className="text-slate-500 hover:text-red-400 mt-6 text-sm text-center font-bold">
+                                [ CANCEL RAID ]
                             </button>
                         </div>
                     ) : (
                         <div className="text-center w-full animate-in zoom-in">
                             {hackResult === 'success' ? (
-                                <div className="border border-green-500 bg-green-900/20 p-8 rounded">
-                                    <CheckCircle className="w-20 h-20 mx-auto text-green-500 mb-4" />
-                                    <h2 className="text-3xl font-black text-green-400 mb-2">ACCESS GRANTED</h2>
-                                    <p className="text-green-300 mb-8 font-bold">Credits successfully stolen.</p>
+                                <div className="border-2 border-emerald-500 bg-emerald-950/40 p-8 rounded-3xl shadow-[0_0_30px_rgba(16,185,129,0.3)]">
+                                    <Zap className="w-20 h-20 mx-auto text-emerald-400 mb-4" />
+                                    <h2 className="text-3xl font-black text-white mb-2">VAULT CRACKED!</h2>
+                                    <p className="text-emerald-300 mb-8 font-bold">Stardust successfully stolen.</p>
                                 </div>
                             ) : (
-                                <div className="border border-red-500 bg-red-900/20 p-8 rounded">
-                                    <AlertTriangle className="w-20 h-20 mx-auto text-red-500 mb-4" />
-                                    <h2 className="text-3xl font-black text-red-500 mb-2">ACCESS DENIED</h2>
-                                    <p className="text-red-300 mb-8 font-bold">Incorrect passkey. Trace failed.</p>
+                                <div className="border-2 border-red-500 bg-red-950/40 p-8 rounded-3xl">
+                                    <Lock className="w-20 h-20 mx-auto text-red-500 mb-4" />
+                                    <h2 className="text-3xl font-black text-white mb-2">CODE FAILED</h2>
+                                    <p className="text-red-300 mb-8 font-bold">Wrong code. The vault locked you out.</p>
                                 </div>
                             )}
-                            <button onClick={moveToNextQuestion} className="w-full bg-green-900 text-green-300 border border-green-500 py-3 mt-4 hover:bg-green-500 hover:text-black font-bold uppercase">
-                                Return to Mining
+                            <button onClick={moveToNextQuestion} className="w-full bg-indigo-600 text-white py-4 mt-4 hover:bg-indigo-500 font-bold rounded-xl transition-all">
+                                CONTINUE
                             </button>
                         </div>
                     )}
@@ -252,14 +260,13 @@ function CyberHackArena({ gameData, onScoreUpdate, onGameEnd }: any) {
             {/* PHASE: HACKED (VICTIM) */}
             {phase === "hacked" && (
                 <div className="z-10 flex flex-col items-center animate-flicker">
-                    <Lock className="w-32 h-32 mb-6 text-red-500 animate-bounce" />
-                    <h1 className="text-5xl md:text-6xl font-black mb-4 text-red-500 text-center glitch-text" data-text="SYSTEM LOCKED">SYSTEM LOCKED</h1>
-                    <p className="text-red-200 mb-10 text-center max-w-md">
-                        &gt; UNAUTHORIZED ACCESS DETECTED.<br />
-                        &gt; Rapidly execute patch protocol to restore connection.
+                    <Lock className="w-32 h-32 mb-6 text-red-500 animate-bounce drop-shadow-[0_0_20px_rgba(239,68,68,0.6)]" />
+                    <h1 className="text-5xl md:text-6xl font-black mb-4 text-white text-center">VAULT LOCKED</h1>
+                    <p className="text-red-200 mb-10 text-center max-w-md text-lg">
+                        An alien raided your vault! Rapidly press the button to reboot your system.
                     </p>
-                    <button onClick={handlePatchClick} className="bg-black border-2 border-red-500 text-red-500 font-black px-12 py-8 rounded-lg text-2xl hover:bg-red-500 hover:text-black transition-all transform active:scale-95 shadow-[0_0_30px_rgba(239,68,68,0.5)]">
-                        EXECUTE PATCH ({patchClicks}/10)
+                    <button onClick={handlePatchClick} className="bg-slate-900 border-4 border-red-500 text-red-500 font-black px-12 py-8 rounded-full text-2xl hover:bg-red-500 hover:text-white transition-all transform active:scale-90 shadow-[0_0_40px_rgba(239,68,68,0.5)]">
+                        REBOOT ({patchClicks}/10)
                     </button>
                 </div>
             )}
@@ -335,7 +342,9 @@ function ClassicArena({ gameData, onScoreUpdate, onGameEnd, isPreview }: any) {
             let newScore = score + points;
             setScore(newScore);
             if (onScoreUpdate) onScoreUpdate(newScore);
-            moveToNextQuestion();
+
+            // Loop questions safely
+            setCurrentQ((currentQ + 1) % gameData.questions.length);
         } else {
             setStreak(0);
             setShowWrongScreen(true);
@@ -344,18 +353,10 @@ function ClassicArena({ gameData, onScoreUpdate, onGameEnd, isPreview }: any) {
         }
     }
 
-    function moveToNextQuestion() {
-        if (currentQ + 1 >= gameData.questions.length) {
-            if (onGameEnd) onGameEnd(answersLog);
-        } else {
-            setCurrentQ(currentQ + 1);
-        }
-    }
-
     function handleContinueClick() {
         if (!canClickContinue) return;
         setShowWrongScreen(false);
-        moveToNextQuestion();
+        setCurrentQ((currentQ + 1) % gameData.questions.length);
     }
 
     return (
