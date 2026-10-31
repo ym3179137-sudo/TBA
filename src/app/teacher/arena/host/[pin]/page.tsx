@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import {
-    OrbitControls,
     Environment,
     ContactShadows,
     useGLTF,
@@ -26,10 +25,8 @@ import {
 } from "@react-three/drei";
 import * as THREE from "three";
 
-// 🚨 CHANGE THIS to your custom sound.
-// The file must be inside /public.
-// Example: public/music/custom-cheer.mp3 -> "/music/custom-cheer.mp3"
-const CROWD_SOUND_SRC = "/music/custom-cheer.mp3";
+// 🚨 THIS POINTS TO public/music/cheer.mp3
+const CROWD_SOUND_SRC = "/music/cheer.mp3";
 
 // 🚨 Multi-Avatar Podium
 function AwardCeremony({
