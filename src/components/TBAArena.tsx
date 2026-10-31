@@ -19,16 +19,7 @@ const ALL_PASSWORDS = [
     "MOON-WALK", "SPACE-SUIT", "HELMET-VISOR", "OXYGEN-TANK", "FUEL-CELL",
     "JET-PACK", "ROCKET-BOOST", "TURBO-ENGINE", "WARP-DRIVE", "ION-THRUSTER",
     "PLASMA-CANNON", "LASER-SWORD", "PHASER-GUN", "ENERGY-SHIELD", "FORCE-FIELD",
-    "CLOAKING-DEVICE", "TELEPORTER", "TRANSPORTER", "REPLICATOR", "HOLOGRAM",
-    "VIRTUAL-REALITY", "CYBER-SPACE", "DIGITAL-WORLD", "MATRIX-GLITCH", "PIXEL-ART",
-    "CODE-BREAKER", "FIREWALL", "ANTI-VIRUS", "ENCRYPTION", "DECRYPTION",
-    "ALGORITHM", "BINARY-CODE", "HARD-DRIVE", "SOFTWARE", "HARDWARE",
-    "PROCESSOR", "GRAPHICS-CARD", "MEMORY-RAM", "POWER-SUPPLY", "MOTHERBOARD",
-    "KEYBOARD", "MOUSE-CLICK", "MONITOR-SCREEN", "SPEAKER-SOUND", "MICROPHONE",
-    "HEADPHONES", "WEB-CAMERA", "PRINTER-INK", "SCANNER-LIGHT", "ROUTER-WIFI",
-    "INTERNET", "WEBSITE", "BROWSER", "SEARCH-ENGINE", "EMAIL-INBOX",
-    "MESSAGE-CHAT", "VIDEO-CALL", "SOCIAL-MEDIA", "ONLINE-GAME", "CLOUD-STORAGE",
-    "DATA-BASE", "SERVER-ROOM", "NETWORK", "SECURITY", "PASSWORD"
+    "CLOAKING-DEVICE", "TELEPORTER", "TRANSPORTER", "REPLICATOR", "HOLOGRAM"
 ];
 
 const PALS = [
@@ -133,7 +124,7 @@ function StarVaultArena({ gameData, onScoreUpdate, onGameEnd }: any) {
     };
 
     const moveToNextQuestion = () => {
-        // 🚨 FIX: Loops questions continuously so it never gets stuck
+        // 🚨 FIXED: Loops questions continuously so it never freezes if there is only 1 question
         const nextQ = (currentQ + 1) % gameData.questions.length;
         setCurrentQ(nextQ);
         setPhase("question");
@@ -146,7 +137,6 @@ function StarVaultArena({ gameData, onScoreUpdate, onGameEnd }: any) {
         <div className="relative flex flex-col items-center justify-center min-h-screen bg-[#0a0514] p-6 font-sans overflow-hidden text-cyan-400">
             {/* Background Stars */}
             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30 pointer-events-none"></div>
-            <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-purple-900/20 to-transparent pointer-events-none"></div>
 
             {/* Show Secret Code Header */}
             {phase !== "password_select" && (

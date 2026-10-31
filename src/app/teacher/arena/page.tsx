@@ -7,13 +7,14 @@ import { createClient } from "@/lib/supabase/client";
 import {
     ArrowLeft, Play, Users, Swords, Crown,
     Ghost, Gamepad2, Fish, BookOpen, AlertCircle,
-    Loader2
+    Loader2,
+    Rocket
 } from "lucide-react";
 
 const GAME_MODES = [
     { id: 'classic', name: 'Classic Quiz', icon: <Swords className="text-blue-400" /> },
     { id: 'gold_quest', name: 'Gold Quest Frenzy', icon: <Crown className="text-yellow-400" /> },
-    { id: 'hacker', name: 'Hacking Simulator', icon: <Ghost className="text-emerald-400" /> },
+    { id: 'hacker', name: 'Star Vault', icon: <Rocket className="text-purple-400" /> },
     { id: 'fishing_frenzy', name: 'Fishing Frenzy', icon: <Fish className="text-cyan-400" /> },
 ];
 
