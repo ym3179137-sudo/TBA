@@ -3,17 +3,10 @@
 import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Trophy, Crown, ArrowLeft, Loader2, StopCircle, FileText, X, CheckCircle, AlertCircle, Volume2, Download } from "lucide-react";
+import { Trophy, Crown, ArrowLeft, Loader2, StopCircle, FileText, X, CheckCircle, AlertCircle, Download } from "lucide-react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Environment, ContactShadows, useGLTF, Html, useAnimations } from "@react-three/drei";
 import * as THREE from "three";
-
-// 🚨 Sound Mapping
-const EMOTE_SOUNDS: Record<string, string> = {
-    dance: "https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3",
-    spin: "https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3",
-    cheer: "https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3"
-};
 
 // 🚨 Multi-Avatar Podium
 function AwardCeremony({ players, isDancing }: { players: any[], isDancing: boolean }) {
@@ -103,8 +96,8 @@ export default function GameHost() {
             if (data) {
                 const sorted = data.sort((a, b) => b.score - a.score);
 
-                // Fetch avatars for top 5 players
-                const topPlayers = sorted.slice(0, 5);
+                // Fetch avatars for top 3 players (since it's an applause for the winners)
+                const topPlayers = sorted.slice(0, 3);
                 const enrichedPlayers = await Promise.all(topPlayers.map(async (p) => {
                     const { data: student } = await supabase.from("children").select("equipped_skin, equipped_emote").eq("id", p.student_id).single();
                     return { ...p, ...student };
@@ -117,13 +110,14 @@ export default function GameHost() {
         return () => clearInterval(interval);
     }, [pin, supabase]);
 
-    // 🚨 Play sound for exactly 5 seconds when game ends
+    // 🚨 Play Applause Sound for exactly 5 seconds when game ends
     useEffect(() => {
         if (isDancing && audioRef.current) {
-            audioRef.current.volume = 0.5;
+            audioRef.current.volume = 0.7; // Loud applause
             audioRef.current.currentTime = 0;
             audioRef.current.play().catch((e) => console.log("Audio play failed:", e));
 
+            // Stop after 5 seconds
             const timer = setTimeout(() => {
                 setIsDancing(false);
                 if (audioRef.current) {
@@ -139,7 +133,7 @@ export default function GameHost() {
     const endGame = async () => {
         setIsEnding(true);
         await supabase.from("game_sessions").update({ status: 'finished' }).eq("pin", pin);
-        setIsDancing(true); // Trigger the dance!
+        setIsDancing(true); // Trigger the dance & applause!
     };
 
     // 🚨 Save Report Card to Library
@@ -151,7 +145,6 @@ export default function GameHost() {
             return;
         }
 
-        // Create a text summary of their answers
         const reportText = student.answers_log.map((log: any) =>
             `Q: ${log.question}\nStudent: ${log.studentAnswer} (${log.isCorrect ? 'Correct' : 'Wrong'})\nCorrect: ${log.correctAnswer}\n`
         ).join("\n-------------------\n");
@@ -184,8 +177,9 @@ export default function GameHost() {
     return (
         <div className="min-h-screen bg-slate-950 text-white p-8 font-sans flex flex-col items-center">
 
-            {/* 🚨 Hidden audio for the ceremony */}
-            <audio ref={audioRef} src={EMOTE_SOUNDS['dance']} />
+            {/* 🚨 Applause Audio Element */}
+            {/* Make sure the file is at public/music/applause.mp3 */}
+            <audio ref={audioRef} src="/music/applause.mp3" />
 
             <button onClick={() => router.push('/teacher/arena')} className="absolute top-8 left-8 flex items-center gap-2 text-slate-400 hover:text-white font-bold bg-slate-900 px-5 py-2.5 rounded-xl border border-slate-800 z-50">
                 <ArrowLeft size={20} /> Exit
@@ -261,7 +255,6 @@ export default function GameHost() {
                         <h2 className="text-2xl font-black mb-1">{selectedStudent.student_name}'s Report</h2>
                         <p className="text-slate-400 mb-4">Score: {selectedStudent.score} pts</p>
 
-                        {/* 🚨 SAVE BUTTON */}
                         <button
                             onClick={() => saveReportToLibrary(selectedStudent)}
                             disabled={isSaving}
