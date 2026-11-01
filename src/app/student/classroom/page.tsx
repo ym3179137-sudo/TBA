@@ -17,23 +17,34 @@ export default function StudentClassroom() {
     const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
+    // 🚨 FIXED: ResizeObserver ensures canvas matches the screen instantly
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
                 const { clientWidth, clientHeight } = containerRef.current;
-                if (canvasRef.current) {
+                if (canvasRef.current && canvasRef.current.width !== clientWidth) {
                     canvasRef.current.width = clientWidth;
                     canvasRef.current.height = clientHeight;
                 }
-                if (laserCanvasRef.current) {
+                if (laserCanvasRef.current && laserCanvasRef.current.width !== clientWidth) {
                     laserCanvasRef.current.width = clientWidth;
                     laserCanvasRef.current.height = clientHeight;
                 }
             }
         };
+
         updateSize();
+        const timeoutId = setTimeout(updateSize, 200);
+
+        const observer = new ResizeObserver(updateSize);
+        if (containerRef.current) observer.observe(containerRef.current);
         window.addEventListener('resize', updateSize);
-        return () => window.removeEventListener('resize', updateSize);
+
+        return () => {
+            clearTimeout(timeoutId);
+            observer.disconnect();
+            window.removeEventListener('resize', updateSize);
+        };
     }, [liveData]);
 
     const laserPoints = useRef<{ x: number; y: number; life: number; color: string }[]>([]);
@@ -125,7 +136,6 @@ export default function StudentClassroom() {
                     ctx.moveTo(prevX * canvasRef.current.width, prevY * canvasRef.current.height);
                     ctx.lineTo(x * canvasRef.current.width, y * canvasRef.current.height);
                     ctx.strokeStyle = color || "#ef4444";
-                    // 🚨 FIXED: Just a standard solid pen
                     ctx.lineWidth = 4;
                     ctx.globalAlpha = 1.0;
                     ctx.lineCap = "round";
@@ -138,7 +148,6 @@ export default function StudentClassroom() {
                 if (ctx && canvasRef.current) {
                     const { x, y, color } = payload.payload;
                     ctx.beginPath();
-                    // 🚨 FIXED: Standard solid dot
                     ctx.arc(x * canvasRef.current.width, y * canvasRef.current.height, 2, 0, Math.PI * 2);
                     ctx.fillStyle = color || "#ef4444";
                     ctx.fill();

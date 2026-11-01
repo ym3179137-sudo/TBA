@@ -17,7 +17,6 @@ export default function TeacherLivePresenter() {
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // 🚨 HIGHLIGHTER REMOVED FROM STATE
     const [tool, setTool] = useState<'none' | 'laser' | 'pen' | 'text'>('pen');
     const [color, setColor] = useState("#ef4444");
     const [isDrawing, setIsDrawing] = useState(false);
@@ -32,6 +31,36 @@ export default function TeacherLivePresenter() {
 
     const prevPointRef = useRef<{ x: number, y: number } | null>(null);
 
+    // 🚨 FIXED: ResizeObserver ensures canvas matches the screen instantly
+    useEffect(() => {
+        const updateSize = () => {
+            if (containerRef.current) {
+                const { clientWidth, clientHeight } = containerRef.current;
+                if (canvasRef.current && canvasRef.current.width !== clientWidth) {
+                    canvasRef.current.width = clientWidth;
+                    canvasRef.current.height = clientHeight;
+                }
+                if (laserCanvasRef.current && laserCanvasRef.current.width !== clientWidth) {
+                    laserCanvasRef.current.width = clientWidth;
+                    laserCanvasRef.current.height = clientHeight;
+                }
+            }
+        };
+
+        updateSize();
+        const timeoutId = setTimeout(updateSize, 200); // Backup delay for safety
+
+        const observer = new ResizeObserver(updateSize);
+        if (containerRef.current) observer.observe(containerRef.current);
+        window.addEventListener('resize', updateSize);
+
+        return () => {
+            clearTimeout(timeoutId);
+            observer.disconnect();
+            window.removeEventListener('resize', updateSize);
+        };
+    }, [presentation]);
+
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'ArrowRight') {
@@ -43,25 +72,6 @@ export default function TeacherLivePresenter() {
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [currentSlide, presentation]);
-
-    useEffect(() => {
-        const updateSize = () => {
-            if (containerRef.current) {
-                const { clientWidth, clientHeight } = containerRef.current;
-                if (canvasRef.current) {
-                    canvasRef.current.width = clientWidth;
-                    canvasRef.current.height = clientHeight;
-                }
-                if (laserCanvasRef.current) {
-                    laserCanvasRef.current.width = clientWidth;
-                    laserCanvasRef.current.height = clientHeight;
-                }
-            }
-        };
-        updateSize();
-        window.addEventListener('resize', updateSize);
-        return () => window.removeEventListener('resize', updateSize);
-    }, [presentation]);
 
     useEffect(() => {
         let animationFrameId: number;
@@ -227,7 +237,6 @@ export default function TeacherLivePresenter() {
 
         ctx.lineTo(x, y);
         ctx.strokeStyle = color;
-        // 🚨 FIXED: Always solid (1.0) and thickness 4
         ctx.lineWidth = 4;
         ctx.globalAlpha = 1.0;
         ctx.lineCap = "round";
@@ -295,7 +304,6 @@ export default function TeacherLivePresenter() {
                     <button onClick={() => setTool('none')} className={`p-2 rounded-lg ${tool === 'none' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><MousePointer2 size={20} /></button>
                     <button onClick={() => setTool('laser')} className={`p-2 rounded-lg ${tool === 'laser' ? 'bg-red-500 text-white' : 'hover:bg-white/20'}`}><div className="w-5 h-5 rounded-full animate-pulse" style={{ backgroundColor: color }} /></button>
                     <button onClick={() => setTool('pen')} className={`p-2 rounded-lg ${tool === 'pen' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><PenTool size={20} /></button>
-                    {/* 🚨 HIGHLIGHTER BUTTON REMOVED */}
                     <button onClick={() => setTool('text')} className={`p-2 rounded-lg ${tool === 'text' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><Type size={20} /></button>
 
                     <div className="flex gap-1 ml-2 pl-2 border-l border-white/20">
