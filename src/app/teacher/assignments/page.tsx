@@ -183,6 +183,8 @@ export default function TeacherAssessments() {
                                                     </div>
                                                 </div>
                                                 <div className="flex flex-col items-end gap-2">
+
+                                                    {/* 🚨 GRADING BUTTON IS HERE 🚨 */}
                                                     <div className="flex items-center gap-2">
                                                         <span className={`px-4 py-1 rounded-full text-sm font-black ${sub.score >= 70 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
                                                             Score: {sub.score || 0}%
@@ -191,6 +193,7 @@ export default function TeacherAssessments() {
                                                             <Edit3 size={16} />
                                                         </button>
                                                     </div>
+
                                                     <span className={`px-3 py-1 rounded-full text-xs font-bold ${sub.integrity_score >= 80 ? 'bg-slate-800 text-slate-400' : 'bg-red-500/20 text-red-400'}`}>
                                                         Integrity: {sub.integrity_score}%
                                                     </span>
@@ -200,7 +203,6 @@ export default function TeacherAssessments() {
                                             <div className="space-y-3">
                                                 {selectedAssignment?.settings?.questions?.map((q: any, idx: number) => {
                                                     const answer = sub.content?.[q.id];
-                                                    // For manual grading, don't highlight red/green if it's a long text answer
                                                     const isExactMatch = q.type === 'multiple_choice' || (q.type === 'short_text' && q.correctAnswer);
                                                     const isCorrect = String(answer).trim().toLowerCase() === String(q.correctAnswer).trim().toLowerCase();
 
