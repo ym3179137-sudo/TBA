@@ -18,24 +18,60 @@ export default function TeacherAssessments() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
-            const { data: assignmentsData } = await supabase.from("assignments").select("*").eq("teacher_id", user.id).order("created_at", { ascending: false });
-            setAssignments(assignmentsData || []);
-            if (assignmentsData && assignmentsData.length > 0) setSelectedAssignment(assignmentsData[0]);
+            // 1. Fetch Assignments
+            const { data: assignmentsData } = await supabase
+                .from("assignments")
+                .select("*")
+                .eq("teacher_id", user.id)
+                .order("created_at", { ascending: false });
 
-            const { data: submissionsData } = await supabase.from("submissions").select("*").order("submitted_at", { ascending: false });
+            setAssignments(assignmentsData || []);
+
+            // Keep the selected assignment updated, or select the first one
+            setSelectedAssignment((prev: any) => {
+                if (!prev && assignmentsData && assignmentsData.length > 0) return assignmentsData[0];
+                if (prev && assignmentsData) {
+                    const updated = assignmentsData.find(a => a.id === prev.id);
+                    return updated || assignmentsData[0];
+                }
+                return prev;
+            });
+
+            // 2. Fetch ALL submissions
+            const { data: submissionsData } = await supabase
+                .from("submissions")
+                .select("*")
+                .order("submitted_at", { ascending: false });
+
             if (submissionsData) {
                 const studentIds = [...new Set(submissionsData.map(s => s.student_id))];
-                const { data: childrenData } = await supabase.from("children").select("id, full_name").in("id", studentIds.filter(id => !id.startsWith("guest-")));
+
+                // Only fetch profiles for valid UUIDs (ignore guests)
+                const validUuids = studentIds.filter(id => id && id.length > 20 && !id.startsWith("guest-"));
+
+                let childrenData: any[] = [];
+                if (validUuids.length > 0) {
+                    const { data: cData } = await supabase
+                        .from("children")
+                        .select("id, full_name")
+                        .in("id", validUuids);
+                    childrenData = cData || [];
+                }
 
                 const enriched = submissionsData.map(sub => ({
                     ...sub,
-                    student_name: childrenData?.find(c => c.id === sub.student_id)?.full_name || "Guest Player",
+                    student_name: childrenData.find(c => c.id === sub.student_id)?.full_name || "Guest Player",
                 }));
                 setSubmissions(enriched);
             }
             setLoading(false);
         }
+
         fetchData();
+
+        // 🚨 Auto-refresh every 3 seconds
+        const interval = setInterval(fetchData, 3000);
+        return () => clearInterval(interval);
     }, [supabase]);
 
     const handleShare = () => {
@@ -48,14 +84,18 @@ export default function TeacherAssessments() {
 
     if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin w-8 h-8" /></div>;
 
-    const filteredSubmissions = selectedAssignment ? submissions.filter(s => s.assignment_id === selectedAssignment.id) : [];
+    const filteredSubmissions = selectedAssignment
+        ? submissions.filter(s => s.assignment_id === selectedAssignment.id)
+        : [];
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-200 p-8 font-sans">
             <div className="max-w-6xl mx-auto">
                 <div className="flex justify-between items-center mb-8">
                     <div>
-                        <h1 className="text-3xl font-extrabold text-white flex items-center gap-3"><FileText className="text-emerald-400" /> Assessments</h1>
+                        <h1 className="text-3xl font-extrabold text-white flex items-center gap-3">
+                            <FileText className="text-emerald-400" /> Assessments
+                        </h1>
                     </div>
                     <div className="flex gap-4">
                         {selectedAssignment && (
@@ -70,22 +110,35 @@ export default function TeacherAssessments() {
                 </div>
 
                 <div className="grid lg:grid-cols-3 gap-8">
+                    {/* LIST OF ASSIGNMENTS */}
                     <div className="lg:col-span-1 space-y-4">
                         <h2 className="text-xl font-bold text-white mb-4">Your Assignments</h2>
-                        {assignments.map((assignment) => (
-                            <button key={assignment.id} onClick={() => setSelectedAssignment(assignment)} className={`w-full text-left p-5 rounded-2xl border transition-all ${selectedAssignment?.id === assignment.id ? 'bg-slate-800 border-emerald-500' : 'bg-slate-900 border-slate-800 hover:border-slate-600'}`}>
-                                <h3 className="font-bold text-white text-lg">{assignment.title}</h3>
-                                <div className="flex items-center gap-3 mt-3 text-xs font-bold text-slate-400">
-                                    <span className="bg-slate-950 px-2 py-1 rounded-md">{submissions.filter(s => s.assignment_id === assignment.id).length} Submissions</span>
-                                    {assignment.settings?.lockMode && <span className="text-red-400 flex items-center gap-1"><AlertTriangle size={12} /> Locked</span>}
-                                </div>
-                            </button>
-                        ))}
+                        {assignments.map((assignment) => {
+                            const subCount = submissions.filter(s => s.assignment_id === assignment.id).length;
+                            return (
+                                <button
+                                    key={assignment.id}
+                                    onClick={() => setSelectedAssignment(assignment)}
+                                    className={`w-full text-left p-5 rounded-2xl border transition-all ${selectedAssignment?.id === assignment.id ? 'bg-slate-800 border-emerald-500' : 'bg-slate-900 border-slate-800 hover:border-slate-600'}`}
+                                >
+                                    <h3 className="font-bold text-white text-lg">{assignment.title}</h3>
+                                    <div className="flex items-center gap-3 mt-3 text-xs font-bold text-slate-400">
+                                        <span className="bg-slate-950 px-2 py-1 rounded-md">{subCount} Submissions</span>
+                                        {assignment.settings?.lockMode && (
+                                            <span className="text-red-400 flex items-center gap-1"><AlertTriangle size={12} /> Locked</span>
+                                        )}
+                                    </div>
+                                </button>
+                            );
+                        })}
                     </div>
 
+                    {/* SUBMISSIONS VIEW */}
                     <div className="lg:col-span-2">
                         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl min-h-[500px]">
-                            <h2 className="text-xl font-bold text-white mb-6">Submissions for: <span className="text-emerald-400">{selectedAssignment?.title}</span></h2>
+                            <h2 className="text-xl font-bold text-white mb-6">
+                                Submissions for: <span className="text-emerald-400">{selectedAssignment?.title}</span>
+                            </h2>
 
                             {filteredSubmissions.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center h-64 text-slate-500">
@@ -98,10 +151,14 @@ export default function TeacherAssessments() {
                                         <div key={sub.id} className="bg-slate-950 border border-slate-800 p-5 rounded-xl">
                                             <div className="flex justify-between items-start mb-4 border-b border-slate-800 pb-4">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-400"><User size={20} /></div>
+                                                    <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-400">
+                                                        <User size={20} />
+                                                    </div>
                                                     <div>
                                                         <h3 className="font-bold text-white">{sub.student_name}</h3>
-                                                        <p className="text-xs text-slate-400 flex items-center gap-1"><Calendar size={12} /> {new Date(sub.submitted_at).toLocaleString()}</p>
+                                                        <p className="text-xs text-slate-400 flex items-center gap-1">
+                                                            <Calendar size={12} /> {new Date(sub.submitted_at).toLocaleString()}
+                                                        </p>
                                                     </div>
                                                 </div>
                                                 <div className="flex flex-col items-end gap-2">
@@ -133,6 +190,7 @@ export default function TeacherAssessments() {
                                                     );
                                                 })}
                                             </div>
+
                                             {sub.violations && sub.violations.length > 0 && (
                                                 <div className="mt-3 text-red-400 text-xs font-bold bg-red-950/30 p-2 rounded-md flex items-center gap-2">
                                                     <AlertTriangle size={14} /> Anti-Cheat Violations: {sub.violations.join(", ")}
