@@ -27,7 +27,6 @@ export default function TeacherLivePresenter() {
     const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
-    // 🚨 FIXED: Using Refs instead of State so it fires instantly
     const isDrawingRef = useRef<boolean>(false);
     const prevPointRef = useRef<{ x: number, y: number } | null>(null);
     const lastEmitRef = useRef<number>(0);
@@ -177,6 +176,9 @@ export default function TeacherLivePresenter() {
                 ctx.arc(e.clientX - rect.left, e.clientY - rect.top, 2, 0, Math.PI * 2);
                 ctx.fillStyle = color;
                 ctx.fill();
+                // 🚨 FIXED: Start the path so lines draw instantly
+                ctx.beginPath();
+                ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
             }
             prevPointRef.current = { x: normX, y: normY };
             channelRef.current?.send({ type: 'broadcast', event: 'dot', payload: { x: normX, y: normY, color } });
@@ -223,7 +225,7 @@ export default function TeacherLivePresenter() {
         ctx.stroke();
 
         const now = Date.now();
-        if (now - lastEmitRef.current > 15) { // Smoother throttle
+        if (now - lastEmitRef.current > 15) {
             channelRef.current?.send({
                 type: 'broadcast',
                 event: 'draw',
@@ -303,8 +305,9 @@ export default function TeacherLivePresenter() {
             <div className="flex-1 overflow-hidden relative" ref={containerRef}>
                 <DeckViewer deck={presentation.deck_data} externalSlide={currentSlide} />
 
-                <canvas ref={canvasRef} className={`absolute inset-0 z-40 ${tool === 'pen' || tool === 'text' ? 'cursor-crosshair' : 'pointer-events-none'}`} />
-                <canvas ref={laserCanvasRef} className={`absolute inset-0 z-50 ${tool === 'laser' ? 'cursor-crosshair' : 'pointer-events-none'}`} />
+                {/* 🚨 ADDED pointer-events-auto TO ENSURE THE PEN ALWAYS WORKS */}
+                <canvas ref={canvasRef} className={`absolute inset-0 z-40 ${tool === 'pen' || tool === 'text' ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'}`} />
+                <canvas ref={laserCanvasRef} className={`absolute inset-0 z-50 ${tool === 'laser' ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'}`} />
 
                 {textInput?.active && (
                     <div className="absolute z-[9999] flex items-center gap-2 bg-black/90 p-2 rounded-xl border border-white/20 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in duration-200" style={{ top: textInput.y - 30, left: textInput.x }}>

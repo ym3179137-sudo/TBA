@@ -17,20 +17,17 @@ export default function DeckViewer({ deck, externalSlide }: any) {
 
     const slide = deck?.slides?.[currentSlide];
 
-    // 🚨 INSTANT IMAGE CACHING
     useEffect(() => {
         if (!slide) return;
         setImgLoading(true);
         setImgError(false);
 
-        // 1. Check if image is already baked into the presentation
         if (slide.savedImage) {
             setImageUrl(slide.savedImage);
             setImgLoading(false);
             return;
         }
 
-        // 2. Check LocalStorage Cache
         const cleanPrompt = (slide.imagePrompt || slide.heading || "cute cartoon education")
             .replace(/[^a-zA-Z0-9 ]/g, "")
             .substring(0, 100);
@@ -43,7 +40,6 @@ export default function DeckViewer({ deck, externalSlide }: any) {
             return;
         }
 
-        // 3. Fetch from AI and cache it
         const fetchUrl = `/api/generate-image?prompt=${encodeURIComponent(cleanPrompt)}&seed=${currentSlide}`;
         fetch(fetchUrl)
             .then(res => res.blob())
@@ -67,7 +63,8 @@ export default function DeckViewer({ deck, externalSlide }: any) {
     const layout = slide.layout || "right-image";
 
     return (
-        <div className="relative w-full h-full flex flex-col bg-slate-950">
+        // 🚨 ADDED pointer-events-none SO THIS NEVER BLOCKS THE PEN
+        <div className="relative w-full h-full flex flex-col bg-slate-950 pointer-events-none select-none">
             <div className={`flex-1 flex flex-col md:flex-row items-center justify-center p-8 md:p-16 gap-12 transition-all duration-500 overflow-y-auto
                 ${layout === 'right-image' ? 'md:flex-row' : layout === 'left-image' ? 'md:flex-row-reverse' : 'flex-col text-center'}`}
             >
