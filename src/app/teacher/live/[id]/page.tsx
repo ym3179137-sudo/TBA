@@ -45,7 +45,7 @@ export default function TeacherLivePresenter() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [currentSlide, presentation]);
 
-    // 🚨 FIXED: Canvas size exactly matches the container, not the window
+    // Canvas sizing
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
@@ -133,7 +133,6 @@ export default function TeacherLivePresenter() {
         };
     }, [presentationId, supabase, router]);
 
-    // 🚨 FIXED: Uses getBoundingClientRect for 1:1 pixel-perfect accuracy
     const handleMouseMove = (e: React.MouseEvent) => {
         const target = e.target as HTMLElement;
         if (target.closest('button')) return;
@@ -180,10 +179,11 @@ export default function TeacherLivePresenter() {
             setIsDrawing(true);
             const ctx = canvasRef.current.getContext('2d');
             if (ctx) {
+                // 🚨 THINNER HIGHLIGHTER DOT
                 ctx.beginPath();
-                ctx.arc(e.clientX - rect.left, e.clientY - rect.top, tool === 'highlighter' ? 10 : 3, 0, Math.PI * 2);
+                ctx.arc(e.clientX - rect.left, e.clientY - rect.top, tool === 'highlighter' ? 3 : 2, 0, Math.PI * 2);
                 ctx.fillStyle = color;
-                ctx.globalAlpha = tool === 'highlighter' ? 0.3 : 1.0;
+                ctx.globalAlpha = tool === 'highlighter' ? 0.2 : 1.0;
                 ctx.fill();
                 ctx.globalAlpha = 1.0;
             }
@@ -193,7 +193,6 @@ export default function TeacherLivePresenter() {
         }
 
         if (tool === 'text') {
-            // 🚨 Opens the custom text box instead of the ugly prompt()
             setTextInput({ active: true, x: e.clientX - rect.left, y: e.clientY - rect.top, value: "" });
         }
     };
@@ -234,8 +233,9 @@ export default function TeacherLivePresenter() {
 
         ctx.lineTo(x, y);
         ctx.strokeStyle = color;
-        ctx.lineWidth = tool === 'highlighter' ? 20 : 5;
-        ctx.globalAlpha = tool === 'highlighter' ? 0.3 : 1.0;
+        // 🚨 THINNER HIGHLIGHTER LINE
+        ctx.lineWidth = tool === 'highlighter' ? 6 : 4;
+        ctx.globalAlpha = tool === 'highlighter' ? 0.2 : 1.0;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.stroke();
@@ -337,7 +337,6 @@ export default function TeacherLivePresenter() {
                     className={`absolute inset-0 z-50 ${tool === 'laser' ? 'cursor-crosshair' : 'pointer-events-none'}`}
                 />
 
-                {/* 🚨 CUSTOM TEXT INPUT BOX */}
                 {textInput?.active && (
                     <div className="absolute z-[9999] flex items-center gap-2 bg-black/80 p-2 rounded-xl border border-white/20 shadow-2xl backdrop-blur-md" style={{ top: textInput.y - 30, left: textInput.x }}>
                         <input

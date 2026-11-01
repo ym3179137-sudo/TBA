@@ -17,7 +17,6 @@ export default function StudentClassroom() {
     const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
-    // 🚨 FIXED: Canvas size exactly matches the container, not the window
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
@@ -126,8 +125,9 @@ export default function StudentClassroom() {
                     ctx.moveTo(prevX * canvasRef.current.width, prevY * canvasRef.current.height);
                     ctx.lineTo(x * canvasRef.current.width, y * canvasRef.current.height);
                     ctx.strokeStyle = color || "#ef4444";
-                    ctx.lineWidth = tool === 'highlighter' ? 20 : 5;
-                    ctx.globalAlpha = tool === 'highlighter' ? 0.3 : 1.0;
+                    // 🚨 THINNER HIGHLIGHTER LINE
+                    ctx.lineWidth = tool === 'highlighter' ? 6 : 4;
+                    ctx.globalAlpha = tool === 'highlighter' ? 0.2 : 1.0;
                     ctx.lineCap = "round";
                     ctx.lineJoin = "round";
                     ctx.stroke();
@@ -139,9 +139,10 @@ export default function StudentClassroom() {
                 if (ctx && canvasRef.current) {
                     const { x, y, color, tool } = payload.payload;
                     ctx.beginPath();
-                    ctx.arc(x * canvasRef.current.width, y * canvasRef.current.height, tool === 'highlighter' ? 10 : 3, 0, Math.PI * 2);
+                    // 🚨 THINNER HIGHLIGHTER DOT
+                    ctx.arc(x * canvasRef.current.width, y * canvasRef.current.height, tool === 'highlighter' ? 3 : 2, 0, Math.PI * 2);
                     ctx.fillStyle = color || "#ef4444";
-                    ctx.globalAlpha = tool === 'highlighter' ? 0.3 : 1.0;
+                    ctx.globalAlpha = tool === 'highlighter' ? 0.2 : 1.0;
                     ctx.fill();
                     ctx.globalAlpha = 1.0;
                 }
