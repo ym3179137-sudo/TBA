@@ -2,17 +2,12 @@
 
 import { ArrowLeft } from "lucide-react";
 
-export default function BackButton({ fallbackUrl = "/student", label = "Back" }: { fallbackUrl?: string, label?: string }) {
-
+export default function BackButton({ fallbackUrl = "/teacher", label = "Back" }: { fallbackUrl?: string, label?: string }) {
     const handleBack = (e: React.MouseEvent) => {
         e.preventDefault();
-
-        // If the user has browser history, go back instantly using the native browser cache
         if (window.history.length > 2) {
             window.history.back();
         } else {
-            // If they opened the link in a new tab (no history), do a hard navigation
-            // This is 10x faster than Next.js router.push for heavy pages
             window.location.href = fallbackUrl;
         }
     };

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { gradeSubmission, deleteAssignment, deleteSubmission } from "@/app/actions/grading";
 import { FileText, CheckCircle, AlertTriangle, User, Calendar, Share2, ClipboardCheck, Edit3, Save, Trash2, Loader2 } from "lucide-react";
-import BackButton from "@/components/BackButton";
+import BackButton from "@/components/BackButton"; // 🚨 Ensure this import is here
 
 export default function TeacherAssessments() {
     const supabase = useMemo(() => createClient(), []);
