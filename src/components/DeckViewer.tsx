@@ -8,7 +8,6 @@ export default function DeckViewer({ deck, externalSlide, onSlideChange, isStude
     const [imgLoading, setImgLoading] = useState(true);
     const [imgError, setImgError] = useState(false);
 
-    // Listen to the teacher's slide changes
     useEffect(() => {
         if (externalSlide !== undefined && externalSlide !== currentSlide) {
             setCurrentSlide(externalSlide);
@@ -112,9 +111,9 @@ export default function DeckViewer({ deck, externalSlide, onSlideChange, isStude
                 </div>
             </div>
 
-            {/* 🚨 TEACHER NAVIGATION BUTTONS (Brought above the canvas with relative z-[60]) */}
+            {/* 🚨 NAVIGATION BUTTONS - NOW AT Z-INDEX 100 SO THEY ARE CLICKABLE */}
             {!isStudentView && (
-                <div className="p-6 bg-slate-900/50 backdrop-blur-md border-t border-slate-800 flex justify-between items-center relative z-[60]">
+                <div className="p-6 bg-slate-900/50 backdrop-blur-md border-t border-slate-800 flex justify-between items-center relative z-[100] pointer-events-auto">
                     <div className="flex gap-2">
                         {deck.slides.map((_: any, i: number) => (
                             <div key={i} className={`h-2 rounded-full transition-all duration-300 ${i === currentSlide ? 'w-8 bg-emerald-500' : 'w-2 bg-slate-700'}`} />

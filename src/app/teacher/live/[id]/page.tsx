@@ -23,10 +23,30 @@ export default function TeacherLivePresenter() {
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const laserCanvasRef = useRef<HTMLCanvasElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
-    // Track previous points for smooth drawing
     const prevPointRef = useRef<{ x: number, y: number } | null>(null);
+
+    // Fix canvas sizing so it doesn't cover the buttons
+    useEffect(() => {
+        const updateSize = () => {
+            if (containerRef.current) {
+                const { clientWidth, clientHeight } = containerRef.current;
+                if (canvasRef.current) {
+                    canvasRef.current.width = clientWidth;
+                    canvasRef.current.height = clientHeight;
+                }
+                if (laserCanvasRef.current) {
+                    laserCanvasRef.current.width = clientWidth;
+                    laserCanvasRef.current.height = clientHeight;
+                }
+            }
+        };
+        updateSize();
+        window.addEventListener('resize', updateSize);
+        return () => window.removeEventListener('resize', updateSize);
+    }, [presentation]);
 
     useEffect(() => {
         let animationFrameId: number;
@@ -89,6 +109,9 @@ export default function TeacherLivePresenter() {
     }, [presentationId, supabase, router]);
 
     const handleMouseMove = (e: React.MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('button')) return; // Don't draw when hovering over buttons
+
         const rect = e.currentTarget.getBoundingClientRect();
         const x = (e.clientX - rect.left) / rect.width;
         const y = (e.clientY - rect.top) / rect.height;
@@ -118,6 +141,9 @@ export default function TeacherLivePresenter() {
     };
 
     const startDraw = (e: React.MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('button')) return; // 🚨 IGNORE CLICKS ON BUTTONS! This fixes the Next button!
+
         if (tool === 'pen') {
             setIsDrawing(true);
             const canvas = canvasRef.current;
@@ -201,7 +227,6 @@ export default function TeacherLivePresenter() {
         channelRef.current?.send({ type: 'broadcast', event: 'clear' });
     };
 
-    // 🚨 FIXED: Now broadcasts the slide change to students instantly!
     const handleSlideChange = async (newSlide: number) => {
         setCurrentSlide(newSlide);
         clearCanvas();
@@ -226,7 +251,8 @@ export default function TeacherLivePresenter() {
             onMouseUp={stopDraw}
             onMouseLeave={stopDraw}
         >
-            <div className="p-4 bg-red-600 text-white flex justify-between items-center z-50">
+            {/* TOP TOOLBAR */}
+            <div className="p-4 bg-red-600 text-white flex justify-between items-center relative z-[100]">
                 <div className="flex items-center gap-3 font-bold text-lg">
                     <span className="relative flex h-3 w-3"><span className="animate-ping absolute h-full w-full rounded-full bg-white opacity-75"></span><span className="relative rounded-full h-3 w-3 bg-white"></span></span>
                     LIVE: {presentation.title}
@@ -250,7 +276,7 @@ export default function TeacherLivePresenter() {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-hidden relative">
+            <div className="flex-1 overflow-hidden relative" ref={containerRef}>
                 {presentation.file_url ? (
                     <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(presentation.file_url)}`} className="w-full h-full border-none pointer-events-none" />
                 ) : (
@@ -260,14 +286,10 @@ export default function TeacherLivePresenter() {
                 <canvas
                     ref={canvasRef}
                     className={`absolute inset-0 z-40 ${tool === 'pen' || tool === 'text' ? 'cursor-crosshair' : 'pointer-events-none'}`}
-                    width={window.innerWidth}
-                    height={window.innerHeight}
                 />
                 <canvas
                     ref={laserCanvasRef}
                     className={`absolute inset-0 z-50 ${tool === 'laser' ? 'cursor-crosshair' : 'pointer-events-none'}`}
-                    width={window.innerWidth}
-                    height={window.innerHeight}
                 />
             </div>
         </div>
