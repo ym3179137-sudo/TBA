@@ -7,11 +7,12 @@ import pptxgen from "pptxgenjs";
 import JSZip from "jszip";
 import {
     Sparkles, Presentation, MonitorPlay, LogOut,
-    FileText, Loader2, ArrowLeft, Download, Edit3,
+    FileText, Loader2, Download, Edit3,
     Send, Users, X, Gamepad2, UploadCloud, LayoutTemplate, Image as ImageIcon, ClipboardList
 } from "lucide-react";
 import DeckViewer from "@/components/DeckViewer";
 import { createClient } from "@/lib/supabase/client";
+import BackButton from "@/components/BackButton";
 
 export default function TeacherHub() {
     const router = useRouter();
@@ -152,7 +153,6 @@ export default function TeacherHub() {
                         <Link href="/teacher/assignments" className="flex items-center gap-3 text-slate-400 hover:text-white hover:bg-slate-800 font-medium px-4 py-3 rounded-xl transition-all whitespace-nowrap">
                             <FileText size={20} /> Assessments
                         </Link>
-                        {/* NEW GRADES TAB */}
                         <Link href="/teacher/grades" className="flex items-center gap-3 text-slate-400 hover:text-white hover:bg-slate-800 font-medium px-4 py-3 rounded-xl transition-all whitespace-nowrap">
                             <ClipboardList size={20} /> Grades
                         </Link>
@@ -189,41 +189,36 @@ export default function TeacherHub() {
 
                             <div className="space-y-5 bg-slate-950 p-5 rounded-2xl border border-slate-800">
                                 <div>
-                                    <label className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
-                                        <LayoutTemplate size={14} /> Slide Layout
-                                    </label>
+                                    <label className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider"><LayoutTemplate size={14} /> Slide Layout</label>
                                     <select value={deckData.slides[activeSlideIndex].layout || "right-image"} onChange={(e) => updateSlide(activeSlideIndex, 'layout', e.target.value)} className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500">
                                         <option value="right-image">Text Left / Image Right</option>
                                         <option value="left-image">Image Left / Text Right</option>
                                         <option value="centered">Centered Text Only</option>
                                     </select>
                                 </div>
-
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Slide Heading</label>
                                     <input type="text" value={deckData.slides[activeSlideIndex].heading || ""} onChange={(e) => updateSlide(activeSlideIndex, 'heading', e.target.value)} className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 font-bold text-lg" />
                                 </div>
-
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Bullet Points (One per line)</label>
                                     <textarea value={deckData.slides[activeSlideIndex].bullets?.join('\n') || ""} onChange={(e) => updateSlide(activeSlideIndex, 'bullets', e.target.value.split('\n'))} className="w-full h-32 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm resize-none" />
                                 </div>
-
                                 <div>
-                                    <label className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
-                                        <ImageIcon size={14} /> AI Image Prompt
-                                    </label>
+                                    <label className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider"><ImageIcon size={14} /> AI Image Prompt</label>
                                     <textarea value={deckData.slides[activeSlideIndex].imagePrompt || ""} onChange={(e) => updateSlide(activeSlideIndex, 'imagePrompt', e.target.value)} placeholder="e.g., A cute cartoon dog teaching a math class..." className="w-full h-20 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm resize-none text-emerald-300" />
                                 </div>
                             </div>
 
-                            <button onClick={() => setIsPublishModalOpen(true)} className="w-full mt-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl shadow-lg flex justify-center gap-2">
-                                <Send size={18} /> Publish to Class
-                            </button>
+                            <button onClick={() => setIsPublishModalOpen(true)} className="w-full mt-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl shadow-lg flex justify-center gap-2"><Send size={18} /> Publish to Class</button>
                         </div>
                     ) : (
                         <div>
-                            <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white mb-6"><ArrowLeft size={16} /> Back</Link>
+                            {/* 🚨 SMART BACK BUTTON */}
+                            <div className="mb-6">
+                                <BackButton fallbackUrl="/dashboard" label="Back" />
+                            </div>
+
                             <h1 className="text-3xl font-extrabold text-white mb-2 flex items-center gap-2"><Sparkles className="text-emerald-400 w-8 h-8" /> AI Designer</h1>
                             <p className="text-slate-400 text-sm mb-8">Generate slides and publish to students.</p>
                             {error && <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-xl mb-6 text-sm">{error}</div>}
@@ -244,9 +239,7 @@ export default function TeacherHub() {
                                 <div className="bg-slate-950 border border-slate-700 border-dashed rounded-xl p-4 text-center relative hover:bg-slate-900 transition-colors">
                                     <input type="file" accept=".pptx" onChange={handlePptxUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                                     {parsingPptx ? (
-                                        <div className="flex items-center justify-center gap-2 text-emerald-400 font-bold">
-                                            <Loader2 className="animate-spin w-5 h-5" /> Extracting text...
-                                        </div>
+                                        <div className="flex items-center justify-center gap-2 text-emerald-400 font-bold"><Loader2 className="animate-spin w-5 h-5" /> Extracting text...</div>
                                     ) : (
                                         <div className="flex flex-col items-center gap-2 text-slate-400">
                                             <UploadCloud className="w-8 h-8 text-emerald-500 mb-1" />

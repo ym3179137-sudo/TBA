@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { ArrowLeft, Loader2, ClipboardList, User } from "lucide-react";
+import { ClipboardList, User, Loader2 } from "lucide-react";
+import BackButton from "@/components/BackButton";
 
 export default function Gradebook() {
     const supabase = useMemo(() => createClient(), []);
@@ -17,15 +17,12 @@ export default function Gradebook() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
-            // 1. Fetch Assignments
             const { data: assigns } = await supabase.from("assignments").select("*").eq("teacher_id", user.id).order("created_at", { ascending: true });
             setAssignments(assigns || []);
 
-            // 2. Fetch Students (Only approved ones)
             const { data: studs } = await supabase.from("children").select("id, full_name, class_name").eq("teacher_id", user.id).eq("is_approved", true).order("full_name", { ascending: true });
             setStudents(studs || []);
 
-            // 3. Fetch Submissions
             const { data: subs } = await supabase.from("submissions").select("*");
             setSubmissions(subs || []);
 
@@ -39,6 +36,12 @@ export default function Gradebook() {
     return (
         <div className="min-h-screen bg-slate-950 p-8 font-sans">
             <div className="max-w-7xl mx-auto">
+
+                {/* 🚨 SMART BACK BUTTON */}
+                <div className="mb-6">
+                    <BackButton fallbackUrl="/teacher" label="Back to Dashboard" />
+                </div>
+
                 <div className="flex justify-between items-center mb-8">
                     <div>
                         <h1 className="text-3xl font-extrabold text-white flex items-center gap-3">
@@ -46,9 +49,6 @@ export default function Gradebook() {
                         </h1>
                         <p className="text-slate-400 mt-2">Review all student grades across all assignments.</p>
                     </div>
-                    <Link href="/teacher" className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-6 py-3 rounded-xl transition-all">
-                        Back to Dashboard
-                    </Link>
                 </div>
 
                 <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
@@ -69,9 +69,7 @@ export default function Gradebook() {
                             <tbody>
                                 {students.length === 0 ? (
                                     <tr>
-                                        <td colSpan={assignments.length + 3} className="p-8 text-center text-slate-500">
-                                            No students assigned to you yet.
-                                        </td>
+                                        <td colSpan={assignments.length + 3} className="p-8 text-center text-slate-500">No students assigned to you yet.</td>
                                     </tr>
                                 ) : (
                                     students.map((student) => {

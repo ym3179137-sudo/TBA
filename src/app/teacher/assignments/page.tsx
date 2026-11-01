@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { gradeSubmission, deleteAssignment, deleteSubmission } from "@/app/actions/grading";
-import { ArrowLeft, Loader2, FileText, CheckCircle, AlertTriangle, User, Calendar, Share2, ClipboardCheck, Edit3, Save, Trash2 } from "lucide-react";
+import { FileText, CheckCircle, AlertTriangle, User, Calendar, Share2, ClipboardCheck, Edit3, Save, Trash2, Loader2 } from "lucide-react";
+import BackButton from "@/components/BackButton";
 
 export default function TeacherAssessments() {
     const supabase = useMemo(() => createClient(), []);
@@ -13,7 +14,7 @@ export default function TeacherAssessments() {
     const [selectedAssignment, setSelectedAssignment] = useState<any>(null);
 
     const [gradingSub, setGradingSub] = useState<any>(null);
-    const [manualScore, setManualScore] = useState<string>("0"); // Use string for input
+    const [manualScore, setManualScore] = useState<string>("0");
     const [manualFeedback, setManualFeedback] = useState("");
     const [savingGrade, setSavingGrade] = useState(false);
 
@@ -96,7 +97,6 @@ export default function TeacherAssessments() {
     const saveGrade = async () => {
         setSavingGrade(true);
         try {
-            // Pass the parsed integer to the server action
             await gradeSubmission(gradingSub.id, parseInt(manualScore) || 0, manualFeedback);
             setGradingSub(null);
         } catch (err: any) {
@@ -113,6 +113,12 @@ export default function TeacherAssessments() {
     return (
         <div className="min-h-screen bg-slate-950 text-slate-200 p-8 font-sans">
             <div className="max-w-6xl mx-auto">
+
+                {/* 🚨 SMART BACK BUTTON */}
+                <div className="mb-6">
+                    <BackButton fallbackUrl="/teacher" label="Back to Dashboard" />
+                </div>
+
                 <div className="flex justify-between items-center mb-8">
                     <div>
                         <h1 className="text-3xl font-extrabold text-white flex items-center gap-3">
@@ -147,9 +153,9 @@ export default function TeacherAssessments() {
                                         <div className="flex items-center gap-3 mt-3 text-xs font-bold text-slate-400">
                                             <span className="bg-slate-950 px-2 py-1 rounded-md">{subCount} Submissions</span>
                                             {assignment.settings?.lockMode && <span className="text-red-400 flex items-center gap-1"><AlertTriangle size={12} /> Locked</span>}
+                                            {assignment.status === 'draft' && <span className="text-amber-400 bg-amber-500/10 px-2 py-1 rounded-md">Draft</span>}
                                         </div>
                                     </button>
-                                    {/* DELETE ASSIGNMENT BUTTON */}
                                     <button onClick={() => handleDeleteAssignment(assignment.id)} className="absolute top-1/2 -translate-y-1/2 right-4 p-2 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100">
                                         <Trash2 size={18} />
                                     </button>
@@ -174,7 +180,6 @@ export default function TeacherAssessments() {
                                 <div className="space-y-4">
                                     {filteredSubmissions.map((sub) => (
                                         <div key={sub.id} className="bg-slate-950 border border-slate-800 p-5 rounded-xl relative group">
-                                            {/* DELETE SUBMISSION BUTTON */}
                                             <button onClick={() => handleDeleteSubmission(sub.id)} className="absolute top-4 right-4 p-1.5 text-red-500/30 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100">
                                                 <Trash2 size={16} />
                                             </button>
@@ -252,22 +257,11 @@ export default function TeacherAssessments() {
                         <div className="space-y-5">
                             <div>
                                 <label className="block text-sm font-bold text-slate-400 mb-2">Score (0 - 100)</label>
-                                <input
-                                    type="number"
-                                    value={manualScore}
-                                    onChange={(e) => setManualScore(e.target.value)}
-                                    min="0" max="100"
-                                    className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 outline-none focus:border-indigo-500 font-bold text-xl"
-                                />
+                                <input type="number" value={manualScore} onChange={(e) => setManualScore(e.target.value)} min="0" max="100" className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 outline-none focus:border-indigo-500 font-bold text-xl" />
                             </div>
                             <div>
                                 <label className="block text-sm font-bold text-slate-400 mb-2">Teacher Feedback</label>
-                                <textarea
-                                    value={manualFeedback}
-                                    onChange={(e) => setManualFeedback(e.target.value)}
-                                    placeholder="Great job! Next time try..."
-                                    className="w-full h-32 bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 outline-none focus:border-indigo-500 resize-none"
-                                />
+                                <textarea value={manualFeedback} onChange={(e) => setManualFeedback(e.target.value)} placeholder="Great job! Next time try..." className="w-full h-32 bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 outline-none focus:border-indigo-500 resize-none" />
                             </div>
                             <div className="flex gap-3 pt-2">
                                 <button onClick={() => setGradingSub(null)} className="flex-1 bg-slate-800 text-white font-bold py-3 rounded-xl hover:bg-slate-700">Cancel</button>
