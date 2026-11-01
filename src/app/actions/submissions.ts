@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { logEvent, logSecurityAlert } from "./logger"; // 🚨 Import Loggers
 
 export async function submitAssignment(data: {
     assignmentId: string;
@@ -22,18 +23,14 @@ export async function submitAssignment(data: {
     const { data: assignment } = await supabase.from("assignments").select("settings").eq("id", data.assignmentId).single();
     const questions = assignment?.settings?.questions || [];
 
-    // 3. Auto-Calculate Score (Fixed to ignore spaces/case)
+    // 3. Auto-Calculate Score
     let correctCount = 0;
     questions.forEach((q: any) => {
         const studentAnswer = data.content[q.id];
         if (q.correctAnswer && studentAnswer) {
-            // Compare strings securely
             const cleanStudentAnswer = String(studentAnswer).trim().toLowerCase();
             const cleanCorrectAnswer = String(q.correctAnswer).trim().toLowerCase();
-
-            if (cleanStudentAnswer === cleanCorrectAnswer) {
-                correctCount++;
-            }
+            if (cleanStudentAnswer === cleanCorrectAnswer) correctCount++;
         }
     });
 
@@ -64,16 +61,23 @@ export async function submitAssignment(data: {
         }
     }
 
-    // 5. Alert Admin if they violated rules
+    // 🚨 5. LOG TO ADMIN (Standard Event)
+    await logEvent("STUDENT_SUBMITTED_ASSIGNMENT", {
+        assignment_title: data.assignmentTitle,
+        studentId: data.studentId,
+        score: scorePercentage
+    });
+
+    // 🚨 6. TRIGGER SECURITY ALERT (If they cheated)
     if (data.violations.length >= 3) {
         const supabaseAdmin = createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
         const { data: student } = await supabaseAdmin.from("children").select("full_name").eq("id", data.studentId).maybeSingle();
 
-        await supabaseAdmin.from("security_alerts").insert({
-            alert_type: "ACADEMIC_DISHONESTY",
-            message: `Student ${student?.full_name || "Unknown"} triggered ${data.violations.length} integrity violations on assignment: "${data.assignmentTitle}".`,
-            ip_address: "System Logged",
-        });
+        await logSecurityAlert(
+            "ACADEMIC_DISHONESTY",
+            `Student ${student?.full_name || "Unknown"} triggered ${data.violations.length} integrity violations on assignment: "${data.assignmentTitle}".`,
+            "System Logged"
+        );
     }
 
     return { success: true, score: scorePercentage };

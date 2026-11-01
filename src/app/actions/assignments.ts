@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { logEvent } from "./logger"; // 🚨 Import Logger
 
 export async function createAssignment(data: {
     title: string;
@@ -9,7 +10,7 @@ export async function createAssignment(data: {
     type: "doc" | "form";
     target_grade?: string;
     target_student_id?: string;
-    status?: 'draft' | 'published'; // 🚨 ADDED STATUS
+    status?: 'draft' | 'published';
     settings: { lockMode?: boolean; questions?: any[] };
 }) {
     const supabase = await createClient();
@@ -35,12 +36,9 @@ export async function createAssignment(data: {
     // 🚨 4. LOG THE EVENT: If a Teacher enables Lock Mode, alert the Admin
     if (data.settings?.lockMode && profile.role === 'teacher') {
         try {
-            await supabase.from("audit_logs").insert({
-                action: "TEACHER_ENABLED_LOCK_MODE",
-                details: {
-                    teacher_name: profile.full_name,
-                    assignment_title: data.title
-                }
+            await logEvent("TEACHER_ENABLED_LOCK_MODE", {
+                teacher_name: profile.full_name,
+                assignment_title: data.title
             });
         } catch (e) {
             console.log("Audit log failed, but continuing...");
@@ -57,7 +55,7 @@ export async function createAssignment(data: {
             type: data.type,
             target_grade: data.target_grade || null,
             target_student_id: data.target_student_id || null,
-            status: data.status || 'draft', // 🚨 SAVE THE STATUS HERE
+            status: data.status || 'draft',
             settings: data.settings,
         })
         .select()
@@ -67,6 +65,14 @@ export async function createAssignment(data: {
         console.error("Supabase Insert Error:", error);
         throw new Error(error.message);
     }
+
+    // 🚨 6. LOG THE CREATION
+    await logEvent("TEACHER_CREATED_ASSIGNMENT", {
+        teacher_name: profile.full_name,
+        title: data.title,
+        type: data.type,
+        status: data.status
+    });
 
     // Refresh the teacher's pages
     revalidatePath("/teacher/assignments");

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { logEvent } from "./logger"; // 🚨 Import Logger
 
 // Helper to initialize the Admin Client (bypasses RLS for teacher actions)
 const getAdminClient = () => {
@@ -25,7 +26,7 @@ export async function gradeSubmission(submissionId: string, newScore: number, fe
 
     const { data: profile } = await supabase
         .from("tba_profiles")
-        .select("role")
+        .select("role, full_name")
         .eq("id", user.id)
         .single();
 
@@ -45,6 +46,13 @@ export async function gradeSubmission(submissionId: string, newScore: number, fe
 
     if (error) throw new Error(error.message);
 
+    // 🚨 LOG TO ADMIN
+    await logEvent("TEACHER_GRADED_SUBMISSION", {
+        teacher_name: profile.full_name,
+        submissionId,
+        newScore
+    });
+
     revalidatePath("/teacher/assignments");
     revalidatePath("/teacher/grades");
     return { success: true };
@@ -59,6 +67,8 @@ export async function deleteAssignment(assignmentId: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
+    const { data: profile } = await supabase.from("tba_profiles").select("full_name").eq("id", user.id).single();
+
     const supabaseAdmin = getAdminClient();
 
     // 1. Delete all submissions for this assignment first (Prevent FK errors)
@@ -68,6 +78,12 @@ export async function deleteAssignment(assignmentId: string) {
     const { error } = await supabaseAdmin.from("assignments").delete().eq("id", assignmentId);
 
     if (error) throw new Error(error.message);
+
+    // 🚨 LOG TO ADMIN
+    await logEvent("TEACHER_DELETED_ASSIGNMENT", {
+        teacher_name: profile?.full_name,
+        assignmentId
+    });
 
     revalidatePath("/teacher/assignments");
     revalidatePath("/teacher/grades");
@@ -83,10 +99,18 @@ export async function deleteSubmission(submissionId: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
+    const { data: profile } = await supabase.from("tba_profiles").select("full_name").eq("id", user.id).single();
+
     const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin.from("submissions").delete().eq("id", submissionId);
 
     if (error) throw new Error(error.message);
+
+    // 🚨 LOG TO ADMIN
+    await logEvent("TEACHER_DELETED_SUBMISSION", {
+        teacher_name: profile?.full_name,
+        submissionId
+    });
 
     revalidatePath("/teacher/assignments");
     revalidatePath("/teacher/grades");
@@ -102,6 +126,8 @@ export async function publishAssignment(assignmentId: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
+    const { data: profile } = await supabase.from("tba_profiles").select("full_name").eq("id", user.id).single();
+
     const supabaseAdmin = getAdminClient();
 
     const { error } = await supabaseAdmin
@@ -110,6 +136,12 @@ export async function publishAssignment(assignmentId: string) {
         .eq("id", assignmentId);
 
     if (error) throw new Error(error.message);
+
+    // 🚨 LOG TO ADMIN
+    await logEvent("TEACHER_PUBLISHED_ASSIGNMENT", {
+        teacher_name: profile?.full_name,
+        assignmentId
+    });
 
     revalidatePath("/teacher/assignments");
     return { success: true };
