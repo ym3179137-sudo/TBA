@@ -9,39 +9,36 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Lesson text is required" }, { status: 400 });
         }
 
-        // 🚨 OPENROUTER SETUP
         const apiKey = process.env.OPENROUTER_API_KEY;
 
-        // Mock Fallback (If you forgot to add the key to Vercel)
+        // 🚨 FALLBACK if API Key is missing
         if (!apiKey) {
-            console.log("No OpenRouter API key found. Returning mock questions...");
-            const mockQuestions = [
-                { id: `q_ai_${Date.now()}_1`, type: "multiple_choice", label: "What is the main topic?", options: ["A", "B", "C", "D"], correctAnswer: "A" },
-                { id: `q_ai_${Date.now()}_2`, type: "multiple_choice", label: "Which statement is true?", options: ["Statement 1", "Statement 2", "Statement 3", "Statement 4"], correctAnswer: "Statement 2" },
-                { id: `q_ai_${Date.now()}_3`, type: "short_text", label: "Summarize the lesson.", correctAnswer: "Learning" }
-            ];
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            return NextResponse.json({ questions: mockQuestions });
+            console.error("❌ OPENROUTER_API_KEY is missing from Environment Variables!");
+            return NextResponse.json({
+                questions: [
+                    { id: `q_mock_1`, type: "multiple_choice", label: "API Key Missing: What is the main topic?", options: ["A", "B", "C", "D"], correctAnswer: "A" },
+                ]
+            });
         }
 
-        // Initialize OpenAI SDK with OpenRouter Base URL
+        console.log("✅ Calling OpenRouter API with text:", lessonText.substring(0, 50) + "...");
+
         const openai = new OpenAI({
             baseURL: "https://openrouter.ai/api/v1",
             apiKey: apiKey,
             defaultHeaders: {
-                "HTTP-Referer": "https://tba-the-baby-academy.vercel.app", // Optional, for OpenRouter dashboard stats
-                "X-Title": "The Baby Academy", // Optional, for OpenRouter dashboard stats
+                "HTTP-Referer": "https://tba-the-baby-academy.vercel.app",
+                "X-Title": "The Baby Academy",
             }
         });
 
-        // 🚨 REAL AI GENERATION
         const response = await openai.chat.completions.create({
-            model: "google/gemini-flash-1.5", // You can change this to "openai/gpt-4o-mini" or "meta-llama/llama-3-8b-instruct"
+            model: "google/gemini-flash-1.5",
             messages: [
                 {
                     role: "system",
                     content: `You are an expert teacher's assistant. Generate 5 multiple-choice questions and 1 short-text question based on the provided text. 
-                    Return ONLY a valid JSON object with a single key "questions" that contains an array of objects. Do not include markdown formatting like \`\`\`json.
+                    Return ONLY a valid JSON object with a single key "questions" that contains an array of objects.
                     The JSON structure must be exactly:
                     {
                       "questions": [
@@ -51,12 +48,6 @@ export async function POST(req: Request) {
                           "label": "The question text here?",
                           "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
                           "correctAnswer": "Option 1"
-                        },
-                        {
-                          "id": "q_ai_2",
-                          "type": "short_text",
-                          "label": "The short text question here?",
-                          "correctAnswer": "The exact correct answer"
                         }
                       ]
                     }`
@@ -65,25 +56,51 @@ export async function POST(req: Request) {
                     role: "user",
                     content: `Generate questions for this lesson: "${lessonText}"`
                 }
-            ]
+            ],
+            response_format: { type: "json_object" } // 🚨 Forces the AI to return valid JSON
         });
 
-        const content = response.choices[0].message.content;
+        console.log("✅ Raw AI Response received");
 
-        // Clean up the response just in case the AI added markdown backticks
-        const cleanedContent = content?.replace(/```json/g, "").replace(/```/g, "").trim();
+        const content = response.choices[0]?.message?.content;
 
-        if (!cleanedContent) {
+        if (!content) {
+            console.error("❌ AI returned empty content");
             throw new Error("Empty response from AI");
         }
 
-        const parsedData = JSON.parse(cleanedContent);
-        const questions = parsedData.questions || []; // We ask the AI to put it under a "questions" key
+        // Clean up in case the AI added markdown backticks like ```json
+        const cleanedContent = content.replace(/```json/g, "").replace(/```/g, "").trim();
 
+        let parsedData;
+        try {
+            parsedData = JSON.parse(cleanedContent);
+        } catch (parseError) {
+            console.error("❌ Failed to parse JSON:", cleanedContent);
+            throw new Error("AI returned invalid JSON");
+        }
+
+        const questions = parsedData.questions || [];
+
+        if (questions.length === 0) {
+            throw new Error("AI returned zero questions");
+        }
+
+        console.log(`✅ Successfully generated ${questions.length} questions`);
         return NextResponse.json({ questions });
 
-    } catch (error) {
-        console.error("AI Error:", error);
-        return NextResponse.json({ error: "Failed to generate questions. Check server logs." }, { status: 500 });
+    } catch (error: any) {
+        console.error("❌ OpenRouter API Error:", error.message);
+
+        // Fallback questions so the app doesn't break completely
+        const fallbackQuestions = [
+            { id: `q_fb_${Date.now()}_1`, type: "multiple_choice", label: "Who is the main character?", options: ["A", "B", "C", "D"], correctAnswer: "A" },
+            { id: `q_fb_${Date.now()}_2`, type: "short_text", label: "Summarize the lesson.", correctAnswer: "Learning" }
+        ];
+
+        return NextResponse.json({
+            questions: fallbackQuestions,
+            error: "AI failed, using fallback questions. Check Vercel logs."
+        });
     }
 }
