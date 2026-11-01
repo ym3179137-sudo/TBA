@@ -17,18 +17,17 @@ export default function TeacherLivePresenter() {
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // Tools & Drawing State
     const [tool, setTool] = useState<'none' | 'laser' | 'pen' | 'text'>('pen');
     const [isDrawing, setIsDrawing] = useState(false);
+    const [attendance, setAttendance] = useState<any[]>([]);
 
-    // 🚨 Laser Canvas Ref
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const laserCanvasRef = useRef<HTMLCanvasElement>(null);
     const channelRef = useRef<any>(null);
-    const [attendance, setAttendance] = useState<any[]>([]);
+
+    const prevPointRef = useRef<{ x: number, y: number } | null>(null);
 
     useEffect(() => {
-        // 🚨 Laser Fading Effect Loop
         let animationFrameId: number;
         const fade = () => {
             const canvas = laserCanvasRef.current;
@@ -36,7 +35,7 @@ export default function TeacherLivePresenter() {
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
                     ctx.globalCompositeOperation = 'destination-out';
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)'; // Fade speed
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                     ctx.globalCompositeOperation = 'source-over';
                 }
@@ -94,9 +93,7 @@ export default function TeacherLivePresenter() {
         const y = (e.clientY - rect.top) / rect.height;
 
         if (tool === 'laser') {
-            // 🚨 Draw locally on teacher screen
             drawLaser(x, y);
-            // 🚨 Broadcast to student
             channelRef.current?.send({ type: 'broadcast', event: 'laser', payload: { x, y } });
         }
         if (tool === 'pen' && isDrawing) {
@@ -111,8 +108,8 @@ export default function TeacherLivePresenter() {
         if (!ctx) return;
 
         ctx.beginPath();
-        ctx.arc(x * canvas.width, y * canvas.height, 5, 0, Math.PI * 2); // Dot size
-        ctx.fillStyle = '#ef4444'; // Red
+        ctx.arc(x * canvas.width, y * canvas.height, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ef4444';
         ctx.shadowBlur = 10;
         ctx.shadowColor = '#ef4444';
         ctx.fill();
@@ -134,9 +131,9 @@ export default function TeacherLivePresenter() {
                 ctx.arc(x, y, 2, 0, Math.PI * 2);
                 ctx.fillStyle = "#ef4444";
                 ctx.fill();
-                ctx.beginPath();
-                ctx.moveTo(x, y);
             }
+
+            prevPointRef.current = { x: x / rect.width, y: y / rect.height };
             channelRef.current?.send({ type: 'broadcast', event: 'dot', payload: { x: x / rect.width, y: y / rect.height } });
         }
         if (tool === 'text') {
@@ -151,7 +148,7 @@ export default function TeacherLivePresenter() {
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
                     ctx.fillStyle = "#ef4444";
-                    ctx.font = "30px Arial";
+                    ctx.font = "bold 30px Arial";
                     ctx.fillText(text, x * rect.width, y * rect.height);
                 }
                 channelRef.current?.send({ type: 'broadcast', event: 'text', payload: { x, y, text } });
@@ -160,7 +157,7 @@ export default function TeacherLivePresenter() {
     };
 
     const drawPen = (e: React.MouseEvent) => {
-        if (!isDrawing || !canvasRef.current) return;
+        if (!isDrawing || !canvasRef.current || !prevPointRef.current) return;
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
@@ -168,6 +165,9 @@ export default function TeacherLivePresenter() {
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
+
+        const normX = x / rect.width;
+        const normY = y / rect.height;
 
         ctx.lineTo(x, y);
         ctx.strokeStyle = "#ef4444";
@@ -177,11 +177,20 @@ export default function TeacherLivePresenter() {
         ctx.stroke();
 
         if (channelRef.current) {
-            channelRef.current.send({ type: 'broadcast', event: 'draw', payload: { x: x / rect.width, y: y / rect.height } });
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'draw',
+                payload: { x: normX, y: normY, prevX: prevPointRef.current.x, prevY: prevPointRef.current.y }
+            });
         }
+
+        prevPointRef.current = { x: normX, y: normY };
     };
 
-    const stopDraw = () => setIsDrawing(false);
+    const stopDraw = () => {
+        setIsDrawing(false);
+        prevPointRef.current = null;
+    };
 
     const clearCanvas = () => {
         if (canvasRef.current) {
@@ -195,6 +204,7 @@ export default function TeacherLivePresenter() {
         setCurrentSlide(newSlide);
         clearCanvas();
         if (sessionId) await supabase.from("live_sessions").update({ current_slide: newSlide }).eq("id", sessionId);
+        channelRef.current?.send({ type: 'broadcast', event: 'slide_change', payload: { slide: newSlide } });
     };
 
     const endLiveSession = async () => {
@@ -214,7 +224,8 @@ export default function TeacherLivePresenter() {
             onMouseUp={stopDraw}
             onMouseLeave={stopDraw}
         >
-            <div className="p-4 bg-red-600 text-white flex justify-between items-center z-50">
+            {/* 🚨 TOP TOOLBAR (Brought above the canvas with relative z-[60]) */}
+            <div className="p-4 bg-red-600 text-white flex justify-between items-center relative z-[60]">
                 <div className="flex items-center gap-3 font-bold text-lg">
                     <span className="relative flex h-3 w-3"><span className="animate-ping absolute h-full w-full rounded-full bg-white opacity-75"></span><span className="relative rounded-full h-3 w-3 bg-white"></span></span>
                     LIVE: {presentation.title}
@@ -245,15 +256,12 @@ export default function TeacherLivePresenter() {
                     <DeckViewer deck={presentation.deck_data} externalSlide={currentSlide} onSlideChange={handleSlideChange} />
                 )}
 
-                {/* Annotation Canvas */}
                 <canvas
                     ref={canvasRef}
                     className={`absolute inset-0 z-40 ${tool === 'pen' || tool === 'text' ? 'cursor-crosshair' : 'pointer-events-none'}`}
                     width={window.innerWidth}
                     height={window.innerHeight}
                 />
-
-                {/* 🚨 Laser Canvas */}
                 <canvas
                     ref={laserCanvasRef}
                     className={`absolute inset-0 z-50 ${tool === 'laser' ? 'cursor-crosshair' : 'pointer-events-none'}`}
