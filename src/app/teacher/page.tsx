@@ -4,11 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import pptxgen from "pptxgenjs";
-import JSZip from "jszip"; // 🚨 IMPORT ADDED
+import JSZip from "jszip";
 import {
     Sparkles, Presentation, MonitorPlay, LogOut,
     FileText, Loader2, ArrowLeft, Download, Edit3,
-    CheckCircle, Link as LinkIcon, Send, Users, X, Gamepad2, UploadCloud
+    Send, Users, X, Gamepad2, UploadCloud, LayoutTemplate, Image as ImageIcon
 } from "lucide-react";
 import DeckViewer from "@/components/DeckViewer";
 import { createClient } from "@/lib/supabase/client";
@@ -23,7 +23,7 @@ export default function TeacherHub() {
     const [style, setStyle] = useState("3D Pixar");
 
     const [loading, setLoading] = useState(false);
-    const [parsingPptx, setParsingPptx] = useState(false); // 🚨 NEW STATE
+    const [parsingPptx, setParsingPptx] = useState(false);
     const [deckData, setDeckData] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +37,6 @@ export default function TeacherHub() {
     const [studentsList, setStudentsList] = useState<{ id: string, full_name: string }[]>([]);
     const [isPublishing, setIsPublishing] = useState(false);
 
-    // 🚨 NEW FUNCTION: Extracts text from PPTX
     const handlePptxUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -53,7 +52,6 @@ export default function TeacherHub() {
 
             let extractedText = "";
 
-            // Sort slides numerically so they stay in order
             slideFiles.sort((a, b) => {
                 const numA = parseInt(a.match(/\d+/)?.[0] || "0");
                 const numB = parseInt(b.match(/\d+/)?.[0] || "0");
@@ -63,7 +61,6 @@ export default function TeacherHub() {
             for (const slideFile of slideFiles) {
                 const content = await zip.file(slideFile)?.async("string");
                 if (content) {
-                    // Extract all text inside <a:t> tags
                     const matches = content.match(/<a:t>(.*?)<\/a:t>/g);
                     if (matches) {
                         const slideText = matches.map((m) => m.replace(/<\/?a:t>/g, "")).join(" ");
@@ -196,23 +193,79 @@ export default function TeacherHub() {
             <main className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden relative">
 
                 {/* Creator Panel */}
-                <div className="w-full lg:w-[450px] bg-slate-900/50 border-b lg:border-b-0 lg:border-r border-slate-800 flex flex-col p-4 md:p-8 shrink-0">
+                <div className="w-full lg:w-[450px] bg-slate-900/50 border-b lg:border-b-0 lg:border-r border-slate-800 flex flex-col p-4 md:p-8 shrink-0 overflow-y-auto">
                     {isEditing && deckData ? (
                         <div className="pb-10">
                             <div className="flex justify-between items-center mb-6">
-                                <h1 className="text-2xl font-extrabold text-white flex items-center gap-2"><Edit3 className="text-emerald-400" /> Editor</h1>
+                                <h1 className="text-2xl font-extrabold text-white flex items-center gap-2"><Edit3 className="text-emerald-400" /> Slide Editor</h1>
                                 <button onClick={() => setIsEditing(false)} className="bg-emerald-500 text-slate-950 px-4 py-2 rounded-xl text-sm font-bold shadow-lg">Done</button>
                             </div>
-                            <div className="flex gap-2 overflow-x-auto pb-4 hide-scrollbar">
+
+                            {/* Slide Selector Thumbnails */}
+                            <div className="flex gap-2 overflow-x-auto pb-4 hide-scrollbar mb-2">
                                 {deckData.slides.map((_: any, i: number) => (
-                                    <button key={i} onClick={() => setActiveSlideIndex(i)} className={`shrink-0 w-10 h-10 rounded-lg font-bold ${activeSlideIndex === i ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>{i + 1}</button>
+                                    <button key={i} onClick={() => setActiveSlideIndex(i)} className={`shrink-0 w-10 h-10 rounded-lg font-bold ${activeSlideIndex === i ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>{i + 1}</button>
                                 ))}
                             </div>
-                            <div className="space-y-4 bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                                <input type="text" value={deckData.slides[activeSlideIndex].heading} onChange={(e) => updateSlide(activeSlideIndex, 'heading', e.target.value)} className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 font-bold" />
-                                <textarea value={deckData.slides[activeSlideIndex].bullets.join('\n')} onChange={(e) => updateSlide(activeSlideIndex, 'bullets', e.target.value.split('\n'))} className="w-full h-32 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm resize-none" />
+
+                            {/* Editor Controls */}
+                            <div className="space-y-5 bg-slate-950 p-5 rounded-2xl border border-slate-800">
+
+                                {/* Layout Picker */}
+                                <div>
+                                    <label className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
+                                        <LayoutTemplate size={14} /> Slide Layout
+                                    </label>
+                                    <select
+                                        value={deckData.slides[activeSlideIndex].layout || "right-image"}
+                                        onChange={(e) => updateSlide(activeSlideIndex, 'layout', e.target.value)}
+                                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500"
+                                    >
+                                        <option value="right-image">Text Left / Image Right</option>
+                                        <option value="left-image">Image Left / Text Right</option>
+                                        <option value="centered">Centered Text Only</option>
+                                    </select>
+                                </div>
+
+                                {/* Heading */}
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Slide Heading</label>
+                                    <input
+                                        type="text"
+                                        value={deckData.slides[activeSlideIndex].heading || ""}
+                                        onChange={(e) => updateSlide(activeSlideIndex, 'heading', e.target.value)}
+                                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 font-bold text-lg"
+                                    />
+                                </div>
+
+                                {/* Bullets */}
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Bullet Points (One per line)</label>
+                                    <textarea
+                                        value={deckData.slides[activeSlideIndex].bullets?.join('\n') || ""}
+                                        onChange={(e) => updateSlide(activeSlideIndex, 'bullets', e.target.value.split('\n'))}
+                                        className="w-full h-32 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm resize-none"
+                                    />
+                                </div>
+
+                                {/* AI Image Prompt */}
+                                <div>
+                                    <label className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
+                                        <ImageIcon size={14} /> AI Image Prompt
+                                    </label>
+                                    <textarea
+                                        value={deckData.slides[activeSlideIndex].imagePrompt || ""}
+                                        onChange={(e) => updateSlide(activeSlideIndex, 'imagePrompt', e.target.value)}
+                                        placeholder="e.g., A cute cartoon dog teaching a math class..."
+                                        className="w-full h-20 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm resize-none text-emerald-300"
+                                    />
+                                    <p className="text-[10px] text-slate-500 mt-1">Changing this will generate a new AI image for this slide.</p>
+                                </div>
                             </div>
-                            <button onClick={() => setIsPublishModalOpen(true)} className="w-full mt-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl shadow-lg flex justify-center gap-2"><Send size={18} /> Publish to Class</button>
+
+                            <button onClick={() => setIsPublishModalOpen(true)} className="w-full mt-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl shadow-lg flex justify-center gap-2">
+                                <Send size={18} /> Publish to Class
+                            </button>
                         </div>
                     ) : (
                         <div>
@@ -234,23 +287,17 @@ export default function TeacherHub() {
                                     </select>
                                 </div>
 
-                                {/* 🚨 NEW: PPTX UPLOADER */}
                                 <div className="bg-slate-950 border border-slate-700 border-dashed rounded-xl p-4 text-center relative hover:bg-slate-900 transition-colors">
-                                    <input
-                                        type="file"
-                                        accept=".pptx"
-                                        onChange={handlePptxUpload}
-                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                    />
+                                    <input type="file" accept=".pptx" onChange={handlePptxUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                                     {parsingPptx ? (
                                         <div className="flex items-center justify-center gap-2 text-emerald-400 font-bold">
-                                            <Loader2 className="animate-spin w-5 h-5" /> Extracting text from PowerPoint...
+                                            <Loader2 className="animate-spin w-5 h-5" /> Extracting text...
                                         </div>
                                     ) : (
                                         <div className="flex flex-col items-center gap-2 text-slate-400">
                                             <UploadCloud className="w-8 h-8 text-emerald-500 mb-1" />
                                             <span className="text-sm font-bold">Upload a PowerPoint (.pptx)</span>
-                                            <span className="text-xs">We will extract the text and rebuild it with AI</span>
+                                            <span className="text-xs">We will extract the text and rebuild it</span>
                                         </div>
                                     )}
                                 </div>

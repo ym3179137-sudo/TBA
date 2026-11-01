@@ -14,30 +14,29 @@ export default function StudentClassroom() {
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const laserCanvasRef = useRef<HTMLCanvasElement>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
     // Track previous points for drawing
     const prevPointRef = useRef<{ x: number, y: number } | null>(null);
 
+    // 🚨 FIXED: Set canvas size to the full window so coordinates match
     useEffect(() => {
         const updateSize = () => {
-            if (containerRef.current) {
-                const { clientWidth, clientHeight } = containerRef.current;
-                if (canvasRef.current) {
-                    canvasRef.current.width = clientWidth;
-                    canvasRef.current.height = clientHeight;
-                }
-                if (laserCanvasRef.current) {
-                    laserCanvasRef.current.width = clientWidth;
-                    laserCanvasRef.current.height = clientHeight;
-                }
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            if (canvasRef.current) {
+                canvasRef.current.width = w;
+                canvasRef.current.height = h;
+            }
+            if (laserCanvasRef.current) {
+                laserCanvasRef.current.width = w;
+                laserCanvasRef.current.height = h;
             }
         };
         updateSize();
         window.addEventListener('resize', updateSize);
         return () => window.removeEventListener('resize', updateSize);
-    }, [liveData, currentSlide]);
+    }, [liveData]);
 
     const laserPoints = useRef<{ x: number; y: number; life: number }[]>([]);
     useEffect(() => {
@@ -71,7 +70,11 @@ export default function StudentClassroom() {
 
     useEffect(() => {
         const getStudentData = () => {
-            let id = localStorage.getItem("tba_student_id") || "";
+            let id = localStorage.getItem("tba_student_id");
+            if (!id) {
+                id = `guest-${Math.random().toString(36).slice(2, 8)}`;
+                localStorage.setItem("tba_student_id", id);
+            }
             let name = localStorage.getItem("tba_student_name") || "Student";
             return { id, name: decodeURIComponent(name) };
         };
@@ -151,6 +154,7 @@ export default function StudentClassroom() {
                 if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
             })
             .subscribe(async (status: string) => {
+                console.log("Student Channel Status:", status); // 🚨 Check console to see if it connects
                 if (status === 'SUBSCRIBED') {
                     await channelRef.current.track({ role: 'student', name: studentName });
                 }
@@ -159,7 +163,7 @@ export default function StudentClassroom() {
 
     if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
 
-    // 🚨 THE "MOVIE" VIEW (Full screen, no UI to distract them)
+    // 🚨 THE "MOVIE" VIEW
     if (liveData) {
         return (
             <div className="h-screen w-screen bg-black flex flex-col overflow-hidden relative">
@@ -168,20 +172,15 @@ export default function StudentClassroom() {
                     LIVE: {liveData.presentation.title}
                 </div>
 
-                <div className="flex-1 overflow-hidden relative" ref={containerRef}>
-                    {liveData.presentation.file_url ? (
-                        <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(liveData.presentation.file_url)}`} className="w-full h-full border-none pointer-events-none" />
-                    ) : (
-                        <DeckViewer
-                            deck={liveData.presentation.deck_data}
-                            externalSlide={currentSlide}
-                            onSlideChange={() => { }}
-                            isStudentView={true}
-                        />
-                    )}
+                <div className="flex-1 overflow-hidden relative">
+                    <DeckViewer
+                        deck={liveData.presentation.deck_data}
+                        externalSlide={currentSlide}
+                    />
 
-                    <canvas ref={canvasRef} className="absolute inset-0 z-40 pointer-events-none" />
-                    <canvas ref={laserCanvasRef} className="absolute inset-0 z-50 pointer-events-none" />
+                    {/* DRAWING CANVASES (Forced to fill the screen) */}
+                    <canvas ref={canvasRef} className="absolute inset-0 z-40 pointer-events-none w-full h-full" />
+                    <canvas ref={laserCanvasRef} className="absolute inset-0 z-50 pointer-events-none w-full h-full" />
                 </div>
             </div>
         );

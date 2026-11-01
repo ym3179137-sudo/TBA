@@ -31,6 +31,23 @@ export default function DeckViewer({ deck, externalSlide }: any) {
 
     const imageUrl = `/api/generate-image?prompt=${encodeURIComponent(cleanPrompt)}&seed=${currentSlide}`;
 
+    // 🚨 PRE-LOAD THE NEXT IMAGE IN THE BACKGROUND
+    useEffect(() => {
+        if (!deck.slides) return;
+        const nextIndex = currentSlide + 1;
+        if (nextIndex < deck.slides.length) {
+            const nextSlide = deck.slides[nextIndex];
+            const nextPrompt = (nextSlide.imagePrompt || nextSlide.heading || "cute cartoon education")
+                .replace(/[^a-zA-Z0-9 ]/g, "")
+                .substring(0, 100);
+            const nextImageUrl = `/api/generate-image?prompt=${encodeURIComponent(nextPrompt)}&seed=${nextIndex}`;
+
+            // This forces the browser to cache the image
+            const img = new Image();
+            img.src = nextImageUrl;
+        }
+    }, [currentSlide, deck]);
+
     return (
         <div className="relative w-full h-full flex flex-col bg-slate-950">
             <div className={`flex-1 flex flex-col md:flex-row items-center justify-center p-8 md:p-16 gap-12 transition-all duration-500 overflow-y-auto
@@ -66,7 +83,7 @@ export default function DeckViewer({ deck, externalSlide }: any) {
                         {imgLoading && !imgError && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-slate-900">
                                 <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-3" />
-                                <p className="text-xs text-emerald-400 font-bold uppercase tracking-widest animate-pulse">Generating AI Image...</p>
+                                <p className="text-xs text-emerald-400 font-bold uppercase tracking-widest animate-pulse">Loading Image...</p>
                             </div>
                         )}
 

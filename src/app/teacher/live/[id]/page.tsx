@@ -23,24 +23,22 @@ export default function TeacherLivePresenter() {
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const laserCanvasRef = useRef<HTMLCanvasElement>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
     const prevPointRef = useRef<{ x: number, y: number } | null>(null);
 
-    // Fix canvas sizing
+    // 🚨 FIXED: Force the canvas to match the exact window size
     useEffect(() => {
         const updateSize = () => {
-            if (containerRef.current) {
-                const { clientWidth, clientHeight } = containerRef.current;
-                if (canvasRef.current) {
-                    canvasRef.current.width = clientWidth;
-                    canvasRef.current.height = clientHeight;
-                }
-                if (laserCanvasRef.current) {
-                    laserCanvasRef.current.width = clientWidth;
-                    laserCanvasRef.current.height = clientHeight;
-                }
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            if (canvasRef.current) {
+                canvasRef.current.width = w;
+                canvasRef.current.height = h;
+            }
+            if (laserCanvasRef.current) {
+                laserCanvasRef.current.width = w;
+                laserCanvasRef.current.height = h;
             }
         };
         updateSize();
@@ -78,7 +76,7 @@ export default function TeacherLivePresenter() {
             const { data: pres } = await supabase.from("presentations").select("*").eq("id", presentationId).single();
             if (!pres) return router.push("/teacher/library");
 
-            // 🚨 CHECK: If it's an uploaded PowerPoint, stop them! 
+            // 🚨 CHECK: Block uploaded PowerPoints because they break the sync
             if (pres.file_url) {
                 alert("⚠️ Slide sync and drawing do NOT work with uploaded PowerPoint files. Please use an AI-generated presentation to go live.");
                 router.push("/teacher/library");
@@ -121,14 +119,14 @@ export default function TeacherLivePresenter() {
 
     const handleMouseMove = (e: React.MouseEvent) => {
         const target = e.target as HTMLElement;
-        if (target.closest('button')) return;
+        if (target.closest('button')) return; // Don't draw over buttons
 
-        const rect = e.currentTarget.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / rect.width;
-        const y = (e.clientY - rect.top) / rect.height;
+        // Calculate exact screen coordinates
+        const x = e.clientX / window.innerWidth;
+        const y = e.clientY / window.innerHeight;
 
         if (tool === 'laser') {
-            drawLaser(x, y);
+            drawLaser(e.clientX, e.clientY);
             channelRef.current?.send({ type: 'broadcast', event: 'laser', payload: { x, y } });
         }
         if (tool === 'pen' && isDrawing) {
@@ -143,9 +141,9 @@ export default function TeacherLivePresenter() {
         if (!ctx) return;
 
         ctx.beginPath();
-        ctx.arc(x * canvas.width, y * canvas.height, 5, 0, Math.PI * 2);
+        ctx.arc(x, y, 8, 0, Math.PI * 2);
         ctx.fillStyle = '#ef4444';
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 15;
         ctx.shadowColor = '#ef4444';
         ctx.fill();
         ctx.shadowBlur = 0;
@@ -153,43 +151,42 @@ export default function TeacherLivePresenter() {
 
     const startDraw = (e: React.MouseEvent) => {
         const target = e.target as HTMLElement;
-        if (target.closest('button')) return;
+        if (target.closest('button')) return; // Don't draw when clicking buttons
 
         if (tool === 'pen') {
             setIsDrawing(true);
             const canvas = canvasRef.current;
             if (!canvas) return;
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
 
             const ctx = canvas.getContext('2d');
             if (ctx) {
                 ctx.beginPath();
-                ctx.arc(x, y, 2, 0, Math.PI * 2);
+                ctx.arc(e.clientX, e.clientY, 3, 0, Math.PI * 2);
                 ctx.fillStyle = "#ef4444";
                 ctx.fill();
             }
 
-            prevPointRef.current = { x: x / rect.width, y: y / rect.height };
-            channelRef.current?.send({ type: 'broadcast', event: 'dot', payload: { x: x / rect.width, y: y / rect.height } });
+            const normX = e.clientX / window.innerWidth;
+            const normY = e.clientY / window.innerHeight;
+            prevPointRef.current = { x: normX, y: normY };
+            channelRef.current?.send({ type: 'broadcast', event: 'dot', payload: { x: normX, y: normY } });
         }
         if (tool === 'text') {
             const text = prompt("Enter text to display:");
             if (text) {
                 const canvas = canvasRef.current;
                 if (!canvas) return;
-                const rect = canvas.getBoundingClientRect();
-                const x = (e.clientX - rect.left) / rect.width;
-                const y = (e.clientY - rect.top) / rect.height;
 
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
                     ctx.fillStyle = "#ef4444";
-                    ctx.font = "bold 30px Arial";
-                    ctx.fillText(text, x * rect.width, y * rect.height);
+                    ctx.font = "bold 40px Arial";
+                    ctx.fillText(text, e.clientX, e.clientY);
                 }
-                channelRef.current?.send({ type: 'broadcast', event: 'text', payload: { x, y, text } });
+
+                const normX = e.clientX / window.innerWidth;
+                const normY = e.clientY / window.innerHeight;
+                channelRef.current?.send({ type: 'broadcast', event: 'text', payload: { x: normX, y: normY, text } });
             }
         }
     };
@@ -200,16 +197,15 @@ export default function TeacherLivePresenter() {
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const x = e.clientX;
+        const y = e.clientY;
 
-        const normX = x / rect.width;
-        const normY = y / rect.height;
+        const normX = x / window.innerWidth;
+        const normY = y / window.innerHeight;
 
         ctx.lineTo(x, y);
         ctx.strokeStyle = "#ef4444";
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 5;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.stroke();
@@ -290,10 +286,10 @@ export default function TeacherLivePresenter() {
             </div>
 
             {/* MAIN PRESENTATION AREA */}
-            <div className="flex-1 overflow-hidden relative" ref={containerRef}>
+            <div className="flex-1 overflow-hidden relative">
                 <DeckViewer deck={presentation.deck_data} externalSlide={currentSlide} />
 
-                {/* DRAWING CANVASES */}
+                {/* DRAWING CANVASES (Covering the whole screen) */}
                 <canvas
                     ref={canvasRef}
                     className={`absolute inset-0 z-40 ${tool === 'pen' || tool === 'text' ? 'cursor-crosshair' : 'pointer-events-none'}`}
@@ -303,7 +299,7 @@ export default function TeacherLivePresenter() {
                     className={`absolute inset-0 z-50 ${tool === 'laser' ? 'cursor-crosshair' : 'pointer-events-none'}`}
                 />
 
-                {/* 🚨 CUSTOM FLOATING PRESENTATION CONTROLS (Z-9999) 🚨 */}
+                {/* 🚨 CUSTOM FLOATING PRESENTATION CONTROLS 🚨 */}
                 <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-6 bg-black/80 backdrop-blur-xl px-6 py-3 rounded-full border-2 border-white/20 shadow-[0_0_30px_rgba(0,0,0,0.8)]">
                     <button
                         onClick={() => handleSlideChange(Math.max(currentSlide - 1, 0))}
