@@ -115,7 +115,6 @@ export default function StudentClassroom() {
             .on('broadcast', { event: 'laser' }, (payload: any) => {
                 laserPoints.current.push({ x: payload.payload.x, y: payload.payload.y, life: 1.0 });
             })
-            // 🚨 FIXED: Now draws perfect lines using prevX/prevY
             .on('broadcast', { event: 'draw' }, (payload: any) => {
                 const ctx = canvasRef.current?.getContext('2d');
                 if (ctx && canvasRef.current) {
@@ -174,7 +173,6 @@ export default function StudentClassroom() {
                         <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(liveData.presentation.file_url)}`} className="w-full h-full border-none pointer-events-none" />
                     ) : (
                         <DeckViewer
-                            key={currentSlide}
                             deck={liveData.presentation.deck_data}
                             externalSlide={currentSlide}
                             onSlideChange={() => { }}

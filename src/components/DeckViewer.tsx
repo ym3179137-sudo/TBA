@@ -3,83 +3,55 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, ArrowRight, Loader2, ImageOff } from "lucide-react";
 
-export default function DeckViewer({
-    deck,
-    externalSlide,
-    onSlideChange,
-    isStudentView = false
-}: {
-    deck: any,
-    externalSlide?: number,
-    onSlideChange?: (index: number) => void,
-    isStudentView?: boolean
-}) {
-    const [internalSlide, setInternalSlide] = useState(0);
+export default function DeckViewer({ deck, externalSlide, onSlideChange, isStudentView }: any) {
+    const [currentSlide, setCurrentSlide] = useState(externalSlide || 0);
     const [imgLoading, setImgLoading] = useState(true);
     const [imgError, setImgError] = useState(false);
 
-    if (!deck || !deck.slides || deck.slides.length === 0) {
-        return <div className="flex h-full w-full items-center justify-center text-slate-500 font-bold p-8">No slide data.</div>;
-    }
-
-    const currentSlide = externalSlide !== undefined ? externalSlide : internalSlide;
-
-    const setCurrentSlide = (val: number | ((prev: number) => number)) => {
-        const newVal = typeof val === 'function' ? val(currentSlide) : val;
-        // 🚨 ONLY lock the student view from going forward
-        if (isStudentView && newVal > currentSlide) return;
-
-        if (externalSlide !== undefined && onSlideChange) {
-            onSlideChange(newVal);
-        } else {
-            setInternalSlide(newVal);
+    // 🚨 THIS IS THE FIX: Listen to the teacher's slide changes!
+    useEffect(() => {
+        if (externalSlide !== undefined && externalSlide !== currentSlide) {
+            setCurrentSlide(externalSlide);
         }
-    };
+    }, [externalSlide]);
 
     useEffect(() => {
         setImgLoading(true);
         setImgError(false);
     }, [currentSlide]);
 
+    const changeSlide = (newIndex: number) => {
+        if (isStudentView) return; // Students cannot click
+        setCurrentSlide(newIndex);
+        if (onSlideChange) onSlideChange(newIndex);
+    };
+
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            // 🚨 Students can only go backward via keys
-            if (isStudentView) {
-                if (e.key === "ArrowLeft") {
-                    e.preventDefault();
-                    setCurrentSlide((prev) => Math.max(prev - 1, 0));
-                }
-                return;
-            }
+            if (isStudentView) return;
 
-            // Teachers can use all keys
             if (e.key === "ArrowRight" || e.key === " ") {
                 e.preventDefault();
-                setCurrentSlide((prev) => Math.min(prev + 1, deck.slides.length - 1));
+                changeSlide(Math.min(currentSlide + 1, deck.slides.length - 1));
             } else if (e.key === "ArrowLeft") {
                 e.preventDefault();
-                setCurrentSlide((prev) => Math.max(prev - 1, 0));
+                changeSlide(Math.max(currentSlide - 1, 0));
             }
         };
-        document.addEventListener("keydown", handleKeyDown);
-        return () => document.removeEventListener("keydown", handleKeyDown);
-    }, [deck.slides.length, currentSlide, isStudentView]);
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [currentSlide, deck.slides.length, isStudentView]);
 
     const slide = deck.slides[currentSlide];
     if (!slide) return null;
 
     const layout = slide.layout || "right-image";
 
-    let imageUrl = slide.customImageUrl;
-    if (!imageUrl) {
-        const cleanPrompt = (slide.imagePrompt || slide.heading || "education")
-            .replace(/[^a-zA-Z0-9 ]/g, "")
-            .trim()
-            .split(/\s+/)
-            .slice(0, 3)
-            .join(",");
-        imageUrl = `https://loremflickr.com/1024/768/${cleanPrompt}?lock=${currentSlide}`;
-    }
+    const cleanPrompt = (slide.imagePrompt || slide.heading || "cute cartoon education")
+        .replace(/[^a-zA-Z0-9 ]/g, "")
+        .substring(0, 100);
+
+    const imageUrl = `/api/generate-image?prompt=${encodeURIComponent(cleanPrompt)}&seed=${currentSlide}`;
 
     return (
         <div className="relative w-full h-full flex flex-col bg-slate-950">
@@ -116,12 +88,15 @@ export default function DeckViewer({
                         {imgLoading && !imgError && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-slate-900">
                                 <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-3" />
+                                <p className="text-xs text-emerald-400 font-bold uppercase tracking-widest animate-pulse">Generating AI Image...</p>
                             </div>
                         )}
+
                         {imgError ? (
                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 p-8 text-center">
                                 <ImageOff className="w-12 h-12 text-indigo-400 mb-4 opacity-50" />
                                 <p className="text-white font-bold text-2xl mb-2">{slide.heading}</p>
+                                <p className="text-slate-400 text-sm max-w-xs">The AI image failed to load. Try generating again.</p>
                             </div>
                         ) : (
                             <img
@@ -137,37 +112,36 @@ export default function DeckViewer({
                 </div>
             </div>
 
-            <div className="p-6 bg-slate-900/50 backdrop-blur-md border-t border-slate-800 flex justify-between items-center z-50">
-                <div className="flex gap-2">
-                    {deck.slides.map((_: any, i: number) => (
-                        <div key={i} className={`h-2 rounded-full transition-all duration-300 ${i === currentSlide ? 'w-8 bg-emerald-500' : 'w-2 bg-slate-700'}`} />
-                    ))}
-                </div>
+            {/* Only show navigation buttons for the teacher */}
+            {!isStudentView && (
+                <div className="p-6 bg-slate-900/50 backdrop-blur-md border-t border-slate-800 flex justify-between items-center">
+                    <div className="flex gap-2">
+                        {deck.slides.map((_: any, i: number) => (
+                            <div key={i} className={`h-2 rounded-full transition-all duration-300 ${i === currentSlide ? 'w-8 bg-emerald-500' : 'w-2 bg-slate-700'}`} />
+                        ))}
+                    </div>
 
-                <div className="flex items-center gap-4">
-                    <button
-                        onClick={() => setCurrentSlide((p) => Math.max(p - 1, 0))}
-                        disabled={currentSlide === 0}
-                        className="p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-30 transition-all active:scale-95"
-                    >
-                        <ArrowLeft className="w-5 h-5" />
-                    </button>
-                    <span className="font-bold text-sm text-slate-400">
-                        {currentSlide + 1} / {deck.slides.length}
-                    </span>
-
-                    {/* Hide Next Button for students */}
-                    {!isStudentView && (
+                    <div className="flex items-center gap-4">
                         <button
-                            onClick={() => setCurrentSlide((p) => Math.min(p + 1, deck.slides.length - 1))}
+                            onClick={() => changeSlide(Math.max(currentSlide - 1, 0))}
+                            disabled={currentSlide === 0}
+                            className="p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-30 transition-all active:scale-95"
+                        >
+                            <ArrowLeft className="w-5 h-5" />
+                        </button>
+                        <span className="font-bold text-sm text-slate-400">
+                            {currentSlide + 1} / {deck.slides.length}
+                        </span>
+                        <button
+                            onClick={() => changeSlide(Math.min(currentSlide + 1, deck.slides.length - 1))}
                             disabled={currentSlide === deck.slides.length - 1}
                             className="p-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-30 shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
                         >
                             <ArrowRight className="w-5 h-5" />
                         </button>
-                    )}
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 }
