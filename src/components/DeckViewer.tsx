@@ -7,6 +7,7 @@ export default function DeckViewer({ deck, externalSlide }: any) {
     const [currentSlide, setCurrentSlide] = useState(externalSlide || 0);
     const [imgLoading, setImgLoading] = useState(true);
     const [imgError, setImgError] = useState(false);
+    const [imageUrl, setImageUrl] = useState<string | null>(null);
 
     useEffect(() => {
         if (externalSlide !== undefined && externalSlide !== currentSlide) {
@@ -14,17 +15,56 @@ export default function DeckViewer({ deck, externalSlide }: any) {
         }
     }, [externalSlide]);
 
+    const slide = deck?.slides?.[currentSlide];
+
+    // 🚨 INSTANT IMAGE CACHING
     useEffect(() => {
+        if (!slide) return;
         setImgLoading(true);
         setImgError(false);
-    }, [currentSlide]);
 
-    const slide = deck.slides[currentSlide];
+        // 1. Check if image is already baked into the presentation
+        if (slide.savedImage) {
+            setImageUrl(slide.savedImage);
+            setImgLoading(false);
+            return;
+        }
+
+        // 2. Check LocalStorage Cache
+        const cleanPrompt = (slide.imagePrompt || slide.heading || "cute cartoon education")
+            .replace(/[^a-zA-Z0-9 ]/g, "")
+            .substring(0, 100);
+        const cacheKey = `tba_img_${currentSlide}_${cleanPrompt.replace(/\s/g, '_')}`;
+
+        const cachedImg = localStorage.getItem(cacheKey);
+        if (cachedImg) {
+            setImageUrl(cachedImg);
+            setImgLoading(false);
+            return;
+        }
+
+        // 3. Fetch from AI and cache it
+        const fetchUrl = `/api/generate-image?prompt=${encodeURIComponent(cleanPrompt)}&seed=${currentSlide}`;
+        fetch(fetchUrl)
+            .then(res => res.blob())
+            .then(blob => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const base64data = reader.result as string;
+                    localStorage.setItem(cacheKey, base64data);
+                    setImageUrl(base64data);
+                    setImgLoading(false);
+                };
+                reader.readAsDataURL(blob);
+            })
+            .catch(() => {
+                setImgError(true);
+                setImgLoading(false);
+            });
+    }, [currentSlide, slide]);
+
     if (!slide) return null;
-
     const layout = slide.layout || "right-image";
-    const cleanPrompt = (slide.imagePrompt || slide.heading || "cute cartoon education").replace(/[^a-zA-Z0-9 ]/g, "").substring(0, 100);
-    const imageUrl = slide.savedImage || `/api/generate-image?prompt=${encodeURIComponent(cleanPrompt)}&seed=${currentSlide}`;
 
     return (
         <div className="relative w-full h-full flex flex-col bg-slate-950">
@@ -65,14 +105,14 @@ export default function DeckViewer({ deck, externalSlide }: any) {
                                 <p className="text-slate-400 text-sm max-w-xs">The AI image failed to load.</p>
                             </div>
                         ) : (
-                            <img
-                                key={currentSlide}
-                                src={imageUrl}
-                                alt={slide.heading}
-                                onLoad={() => setImgLoading(false)}
-                                onError={() => { setImgLoading(false); setImgError(true); }}
-                                className={`w-full h-full object-cover transition-all duration-700 ${imgLoading ? 'opacity-0 scale-105' : 'opacity-100 scale-100'}`}
-                            />
+                            imageUrl && (
+                                <img
+                                    key={currentSlide}
+                                    src={imageUrl}
+                                    alt={slide.heading}
+                                    className={`w-full h-full object-cover transition-all duration-700 ${imgLoading ? 'opacity-0 scale-105' : 'opacity-100 scale-100'}`}
+                                />
+                            )
                         )}
                     </div>
                 </div>

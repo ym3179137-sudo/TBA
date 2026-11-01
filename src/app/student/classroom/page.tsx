@@ -48,7 +48,7 @@ export default function StudentClassroom() {
                 if (ctx) {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     laserPoints.current.forEach((p) => {
-                        p.life -= 0.05; // Faster fade
+                        p.life -= 0.05;
                         if (p.life > 0) {
                             ctx.beginPath();
                             ctx.arc(p.x * canvas.width, p.y * canvas.height, 8, 0, Math.PI * 2);

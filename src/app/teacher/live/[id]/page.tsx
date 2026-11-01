@@ -19,7 +19,6 @@ export default function TeacherLivePresenter() {
 
     const [tool, setTool] = useState<'none' | 'laser' | 'pen' | 'text'>('pen');
     const [color, setColor] = useState("#ef4444");
-    const [isDrawing, setIsDrawing] = useState(false);
     const [attendance, setAttendance] = useState<any[]>([]);
     const [textInput, setTextInput] = useState<{ active: boolean, x: number, y: number, value: string } | null>(null);
 
@@ -28,10 +27,11 @@ export default function TeacherLivePresenter() {
     const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
+    // 🚨 FIXED: Using Refs instead of State so it fires instantly
+    const isDrawingRef = useRef<boolean>(false);
     const prevPointRef = useRef<{ x: number, y: number } | null>(null);
-    const lastEmitRef = useRef<number>(0); // 🚨 Throttling Timer
+    const lastEmitRef = useRef<number>(0);
 
-    // Keyboard Navigation
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'ArrowRight') {
@@ -44,7 +44,6 @@ export default function TeacherLivePresenter() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [currentSlide, presentation]);
 
-    // Canvas Resizing
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
@@ -63,14 +62,9 @@ export default function TeacherLivePresenter() {
         const timeoutId = setTimeout(updateSize, 200);
         const observer = new ResizeObserver(updateSize);
         if (containerRef.current) observer.observe(containerRef.current);
-
-        return () => {
-            clearTimeout(timeoutId);
-            observer.disconnect();
-        };
+        return () => { clearTimeout(timeoutId); observer.disconnect(); };
     }, [presentation]);
 
-    // Smooth Laser Fade
     useEffect(() => {
         let animationFrameId: number;
         const fade = () => {
@@ -79,7 +73,7 @@ export default function TeacherLivePresenter() {
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
                     ctx.globalCompositeOperation = 'destination-out';
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)'; // Faster fade = smoother
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                     ctx.globalCompositeOperation = 'source-over';
                 }
@@ -141,14 +135,13 @@ export default function TeacherLivePresenter() {
 
         if (tool === 'laser') {
             drawLaser(e.clientX - rect.left, e.clientY - rect.top);
-            // Throttled Laser emit
             const now = Date.now();
             if (now - lastEmitRef.current > 30) {
                 channelRef.current?.send({ type: 'broadcast', event: 'laser', payload: { x, y, color } });
                 lastEmitRef.current = now;
             }
         }
-        if (tool === 'pen' && isDrawing) {
+        if (tool === 'pen' && isDrawingRef.current) {
             drawPen(e);
         }
     };
@@ -177,7 +170,7 @@ export default function TeacherLivePresenter() {
         const normY = (e.clientY - rect.top) / rect.height;
 
         if (tool === 'pen') {
-            setIsDrawing(true);
+            isDrawingRef.current = true;
             const ctx = canvasRef.current.getContext('2d');
             if (ctx) {
                 ctx.beginPath();
@@ -188,6 +181,7 @@ export default function TeacherLivePresenter() {
             prevPointRef.current = { x: normX, y: normY };
             channelRef.current?.send({ type: 'broadcast', event: 'dot', payload: { x: normX, y: normY, color } });
         }
+
         if (tool === 'text') {
             setTextInput({ active: true, x: e.clientX - rect.left, y: e.clientY - rect.top, value: "" });
         }
@@ -210,7 +204,7 @@ export default function TeacherLivePresenter() {
     };
 
     const drawPen = (e: React.MouseEvent) => {
-        if (!isDrawing || !canvasRef.current || !prevPointRef.current) return;
+        if (!isDrawingRef.current || !canvasRef.current || !prevPointRef.current) return;
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
@@ -228,9 +222,8 @@ export default function TeacherLivePresenter() {
         ctx.lineJoin = "round";
         ctx.stroke();
 
-        // 🚨 THROTTLED DRAW EMIT (Max 30 frames per second)
         const now = Date.now();
-        if (now - lastEmitRef.current > 30) {
+        if (now - lastEmitRef.current > 15) { // Smoother throttle
             channelRef.current?.send({
                 type: 'broadcast',
                 event: 'draw',
@@ -243,7 +236,7 @@ export default function TeacherLivePresenter() {
     };
 
     const stopDraw = () => {
-        setIsDrawing(false);
+        isDrawingRef.current = false;
         prevPointRef.current = null;
     };
 
@@ -275,7 +268,6 @@ export default function TeacherLivePresenter() {
     return (
         <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden relative select-none" onMouseMove={handleMouseMove} onMouseDown={startDraw} onMouseUp={stopDraw} onMouseLeave={stopDraw}>
 
-            {/* HEADER */}
             <div className="p-4 bg-red-600 text-white flex justify-between items-center relative z-[100] shadow-md">
                 <div className="flex items-center gap-3 font-bold text-lg">
                     <span className="relative flex h-3 w-3"><span className="animate-ping absolute h-full w-full rounded-full bg-white opacity-75"></span><span className="relative rounded-full h-3 w-3 bg-white"></span></span>
@@ -308,14 +300,12 @@ export default function TeacherLivePresenter() {
                 </div>
             </div>
 
-            {/* PRESENTATION */}
             <div className="flex-1 overflow-hidden relative" ref={containerRef}>
                 <DeckViewer deck={presentation.deck_data} externalSlide={currentSlide} />
 
                 <canvas ref={canvasRef} className={`absolute inset-0 z-40 ${tool === 'pen' || tool === 'text' ? 'cursor-crosshair' : 'pointer-events-none'}`} />
                 <canvas ref={laserCanvasRef} className={`absolute inset-0 z-50 ${tool === 'laser' ? 'cursor-crosshair' : 'pointer-events-none'}`} />
 
-                {/* FLOATING TEXT INPUT */}
                 {textInput?.active && (
                     <div className="absolute z-[9999] flex items-center gap-2 bg-black/90 p-2 rounded-xl border border-white/20 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in duration-200" style={{ top: textInput.y - 30, left: textInput.x }}>
                         <input
@@ -330,7 +320,6 @@ export default function TeacherLivePresenter() {
                     </div>
                 )}
 
-                {/* BOTTOM NAV */}
                 <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-6 bg-black/80 backdrop-blur-xl px-6 py-3 rounded-full border-2 border-white/20 shadow-[0_0_30px_rgba(0,0,0,0.8)]">
                     <button onClick={() => handleSlideChange(Math.max(currentSlide - 1, 0))} disabled={currentSlide === 0} className="p-2 text-white hover:bg-white/20 rounded-full disabled:opacity-30 transition-all active:scale-90"><ChevronLeft size={32} /></button>
                     <span className="text-white font-bold text-sm tracking-widest min-w-[60px] text-center">{currentSlide + 1} / {totalSlides}</span>
