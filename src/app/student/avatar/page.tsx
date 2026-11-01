@@ -1,9 +1,8 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import AvatarStudio from "@/components/ThreeDWorld";
+import BackButton from "@/components/BackButton"; // 🚨 Import the smart back button
 
 export default async function AvatarPage() {
     const cookieStore = await cookies();
@@ -19,18 +18,15 @@ export default async function AvatarPage() {
 
     const { data: student } = await supabaseAdmin
         .from("children")
-        .select("coins, equipped_skin, unlocked_skins")
+        .select("coins, equipped_skin, equipped_emote, unlocked_skins")
         .eq("id", studentId)
-        .single();
+        .maybeSingle();
 
     return (
         <div className="min-h-screen bg-slate-950 p-4 md:p-8 flex flex-col items-center relative">
-
-            {/* 🚨 BACK BUTTON */}
+            {/* 🚨 SMART BACK BUTTON */}
             <div className="w-full max-w-6xl mb-6 flex justify-start">
-                <Link href="/student" className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors font-bold bg-slate-900 px-5 py-2.5 rounded-xl border border-slate-800 shadow-lg">
-                    <ArrowLeft size={20} /> Back to Dashboard
-                </Link>
+                <BackButton fallbackUrl="/student" label="Back to Dashboard" />
             </div>
 
             <h1 className="text-3xl font-bold text-white mb-6 drop-shadow-md">Avatar Studio</h1>
@@ -39,6 +35,7 @@ export default async function AvatarPage() {
                 studentId={studentId}
                 initialCoins={student?.coins || 0}
                 initialSkin={student?.equipped_skin || ""}
+                initialEmote={student?.equipped_emote || "none"}
                 initialUnlockedSkins={student?.unlocked_skins || []}
             />
         </div>
