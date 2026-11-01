@@ -66,7 +66,12 @@ export default function PlayGame() {
         if (!pin || !studentId) return;
 
         const interval = setInterval(async () => {
-            const { data } = await supabase.from("game_sessions").select("*").eq("pin", pin).single();
+            const { data } = await supabase
+                .from("game_sessions")
+                .select("*")
+                .eq("pin", pin)
+                .maybeSingle(); // 🚨 FIXED 406 ERROR
+
             if (data) {
                 if (data.status === "playing" && data.game_data && status === "lobby") {
                     setGameData(data.game_data);

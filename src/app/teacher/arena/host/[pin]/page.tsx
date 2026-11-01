@@ -149,7 +149,7 @@ export default function GameHost() {
                             .from("children")
                             .select("equipped_skin, equipped_emote")
                             .eq("id", p.student_id)
-                            .single();
+                            .maybeSingle(); // 🚨 FIXED 406 ERROR
 
                         return { ...p, ...student };
                     })
@@ -289,8 +289,8 @@ export default function GameHost() {
                             <div
                                 key={s.student_id}
                                 className={`flex justify-between items-center p-4 rounded-xl border ${i === 0
-                                        ? "bg-amber-500/20 border-amber-500"
-                                        : "bg-slate-900 border-slate-800"
+                                    ? "bg-amber-500/20 border-amber-500"
+                                    : "bg-slate-900 border-slate-800"
                                     }`}
                             >
                                 <span className="font-bold text-lg flex items-center gap-2">
@@ -400,8 +400,8 @@ export default function GameHost() {
                                     <div
                                         key={i}
                                         className={`p-4 rounded-xl border flex gap-4 ${log.isCorrect
-                                                ? "bg-emerald-950/30 border-emerald-900/50"
-                                                : "bg-red-950/30 border-red-900/50"
+                                            ? "bg-emerald-950/30 border-emerald-900/50"
+                                            : "bg-red-950/30 border-red-900/50"
                                             }`}
                                     >
                                         <div className="mt-1 shrink-0">

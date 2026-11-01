@@ -1,51 +1,39 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Flame, Clock, Shield, Sparkles, EyeOff, Rocket, Key, Lock, Unlock, Zap, Star } from "lucide-react";
+import { Flame, Clock, Shield, Sparkles, EyeOff, Terminal, Fingerprint, Lock, CheckCircle, AlertTriangle, Cpu } from "lucide-react";
 
-// 🚨 100+ FUN, KID-FRIENDLY SECRET CODES
+// 🚨 THE MASSIVE PASSWORD POOL
 const ALL_PASSWORDS = [
     "PIZZA-PARTY", "ROCKET-SHIP", "NEON-CAT", "DINO-ROAR", "SUPER-HERO",
     "JELLY-BEAN", "ICE-CREAM", "MOON-BOUNCE", "TURBO-SNAIL", "MEGA-CHEESE",
     "STAR-POWER", "GALAXY-QUEST", "SPACE-MONKEY", "ALIEN-FRIEND", "ROBOT-DANCE",
-    "PIXEL-POWER", "RAINBOW-DASH", "CANDY-CRUSH", "SUPER-NOVA", "LASER-BEAM",
-    "MAGIC-WAND", "DRAGON-FLY", "PIRATE-GOLD", "NINJA-TURTLE", "UNICORN-HORN",
-    "BUBBLE-GUM", "FLYING-SAUCER", "PLANET-MARS", "COMET-STRIKE", "ASTRO-BLAST",
-    "METEOR-SHOWER", "BLACK-HOLE", "WARP-SPEED", "TIME-TRAVEL", "HYPER-SPACE",
-    "ZERO-GRAVITY", "SPACE-STATION", "LUNAR-MOON", "SUN-FLARE", "STAR-DUST",
-    "COSMIC-WAVE", "NEBULA-CLOUD", "GALAXY-CORE", "QUASAR-BEAM", "PULSAR-STAR",
-    "NEUTRON-BOMB", "SUPER-MASSIVE", "DARK-MATTER", "LIGHT-YEAR", "SOLAR-WIND",
-    "ORBIT-SPIN", "GRAVITY-PULL", "ECLIPSE-SHADOW", "CRATER-LAKE", "RING-PLANET",
-    "MOON-WALK", "SPACE-SUIT", "HELMET-VISOR", "OXYGEN-TANK", "FUEL-CELL",
-    "JET-PACK", "ROCKET-BOOST", "TURBO-ENGINE", "WARP-DRIVE", "ION-THRUSTER",
-    "PLASMA-CANNON", "LASER-SWORD", "PHASER-GUN", "ENERGY-SHIELD", "FORCE-FIELD",
-    "CLOAKING-DEVICE", "TELEPORTER", "TRANSPORTER", "REPLICATOR", "HOLOGRAM"
+    "PIXEL-POWER", "RAINBOW-DASH", "CANDY-CRUSH", "SUPER-NOVA", "LASER-BEAM"
 ];
 
 const PALS = [
-    { id: "glitch", name: "Glitch", emoji: "👾", effect: "nothing", weight: 3, desc: "Broken data. Nothing gained." },
-    { id: "pip", name: "Pip", emoji: "🐣", effect: "add", amount: 10, weight: 4, desc: "+10 Stardust collected." },
-    { id: "munch", name: "Munch", emoji: "🟢", effect: "add", amount: 20, weight: 15, desc: "+20 Stardust collected." },
-    { id: "bounce", name: "Bounce", emoji: "🟡", effect: "add", amount: 30, weight: 15, desc: "+30 Stardust collected." },
-    { id: "nimbus", name: "Nimbus", emoji: "☁️", effect: "add", amount: 50, weight: 14, desc: "+50 Stardust collected." },
-    { id: "twin", name: "Twin", emoji: "👯", effect: "double", weight: 9, desc: "DOUBLE YOUR STARDUST!" },
-    { id: "trine", name: "Trine", emoji: "💎", effect: "triple", weight: 5, desc: "TRIPLE YOUR STARDUST!" },
-    { id: "rift", name: "Rift", emoji: "🌀", effect: "hack", weight: 9, desc: "WORMHOLE OPENED. Raid a player!" },
+    { id: "junkbit", name: "Junkbit", emoji: "🗑️", effect: "nothing", weight: 3, desc: "Corrupted data. Nothing gained." },
+    { id: "pip", name: "Pip", emoji: "🐣", effect: "add", amount: 10, weight: 4, desc: "+10 Credits extracted." },
+    { id: "munch", name: "Munch", emoji: "🟢", effect: "add", amount: 20, weight: 15, desc: "+20 Credits extracted." },
+    { id: "bounce", name: "Bounce", emoji: "🟡", effect: "add", amount: 30, weight: 15, desc: "+30 Credits extracted." },
+    { id: "nimbus", name: "Nimbus", emoji: "☁️", effect: "add", amount: 50, weight: 14, desc: "+50 Credits extracted." },
+    { id: "twin", name: "Twin", emoji: "👯", effect: "double", weight: 9, desc: "DOUBLE YOUR CREDITS!" },
+    { id: "trine", name: "Trine", emoji: "💎", effect: "triple", weight: 5, desc: "TRIPLE YOUR CREDITS!" },
+    { id: "rift", name: "Rift", emoji: "🌀", effect: "hack", weight: 9, desc: "EXPLOIT FOUND. Trigger a hack." },
 ];
 
-export default function TBAArena({
-    gameData, gameMode, onScoreUpdate, onGameEnd, isPreview
-}: any) {
+export default function TBAArena({ gameData, gameMode, onScoreUpdate, onGameEnd, isPreview }: any) {
+    // Route to the correct game mode
     if (gameMode === 'hacker') {
-        return <StarVaultArena gameData={gameData} onScoreUpdate={onScoreUpdate} onGameEnd={onGameEnd} isPreview={isPreview} />;
+        return <CryptoHackArena gameData={gameData} onScoreUpdate={onScoreUpdate} onGameEnd={onGameEnd} />;
     }
     return <ClassicArena gameData={gameData} onScoreUpdate={onScoreUpdate} onGameEnd={onGameEnd} isPreview={isPreview} />;
 }
 
 // ==========================================
-// 🚨 STAR VAULT (KID-FRIENDLY HACKER MODE)
+// 🚨 CRYPTO HACK MODE (BLOOKET STYLE)
 // ==========================================
-function StarVaultArena({ gameData, onScoreUpdate, onGameEnd }: any) {
+function CryptoHackArena({ gameData, onScoreUpdate, onGameEnd }: any) {
     const [currentQ, setCurrentQ] = useState(0);
     const [score, setScore] = useState(0);
     const [answersLog, setAnswersLog] = useState<any[]>([]);
@@ -58,8 +46,8 @@ function StarVaultArena({ gameData, onScoreUpdate, onGameEnd }: any) {
     const [hackResult, setHackResult] = useState<"success" | "fail" | null>(null);
     const [patchClicks, setPatchClicks] = useState(0);
 
-    // Pick 5 random passwords on mount
     useEffect(() => {
+        // Pick 5 random passwords for this game
         const shuffled = [...ALL_PASSWORDS].sort(() => 0.5 - Math.random());
         setSelectedPasswords(shuffled.slice(0, 5));
     }, []);
@@ -72,6 +60,7 @@ function StarVaultArena({ gameData, onScoreUpdate, onGameEnd }: any) {
         setAnswersLog((prev: any) => [...prev, { question: question.prompt, correctAnswer: question.correctAnswer, studentAnswer: option, isCorrect }]);
 
         if (isCorrect) {
+            // Roll for a Pal (weighted out of 74)
             const roll = Math.floor(Math.random() * 74);
             let cum = 0;
             let selected = PALS[0];
@@ -82,12 +71,18 @@ function StarVaultArena({ gameData, onScoreUpdate, onGameEnd }: any) {
             setRolledPal(selected);
             setPhase("reward");
         } else {
-            moveToNextQuestion();
+            // If they get the answer wrong, simulate a 10% chance they get hacked
+            if (Math.random() < 0.1) {
+                setPhase("hacked");
+            } else {
+                moveToNextQuestion();
+            }
         }
     };
 
     const applyReward = () => {
         if (rolledPal.effect === "hack") {
+            // Pick 3 random passwords for the hack screen (the correct one is NOT guaranteed to be in the list, just like Blooket)
             const options = [...ALL_PASSWORDS].sort(() => 0.5 - Math.random()).slice(0, 3);
             setHackOptions(options);
             setPhase("hack");
@@ -104,14 +99,20 @@ function StarVaultArena({ gameData, onScoreUpdate, onGameEnd }: any) {
     };
 
     const submitHack = (guess: string) => {
+        // 33% chance to guess the password correctly
         const isSuccess = Math.random() > 0.66;
         if (isSuccess) {
             setHackResult("success");
-            const newScore = score + Math.floor(score * 0.25);
+            const stolen = Math.floor(score * 0.25);
+            const newScore = score + stolen;
             setScore(newScore);
             onScoreUpdate(newScore);
         } else {
             setHackResult("fail");
+            // If you fail a hack, the system locks you out!
+            setTimeout(() => {
+                setPhase("hacked");
+            }, 2000);
         }
     };
 
@@ -124,7 +125,6 @@ function StarVaultArena({ gameData, onScoreUpdate, onGameEnd }: any) {
     };
 
     const moveToNextQuestion = () => {
-        // 🚨 FIXED: Loops questions continuously so it never freezes if there is only 1 question
         const nextQ = (currentQ + 1) % gameData.questions.length;
         setCurrentQ(nextQ);
         setPhase("question");
@@ -134,32 +134,22 @@ function StarVaultArena({ gameData, onScoreUpdate, onGameEnd }: any) {
     };
 
     return (
-        <div className="relative flex flex-col items-center justify-center min-h-screen bg-[#0a0514] p-6 font-sans overflow-hidden text-cyan-400">
-            {/* Background Stars */}
-            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30 pointer-events-none"></div>
+        <div className="relative flex flex-col items-center justify-center min-h-screen bg-black p-6 font-mono overflow-hidden text-green-500">
+            <div className="crt-overlay" />
 
-            {/* Show Secret Code Header */}
-            {phase !== "password_select" && (
-                <div className="absolute top-6 left-6 bg-black/50 border border-cyan-800 px-6 py-3 rounded-2xl flex items-center gap-3 shadow-[0_0_20px_rgba(6,182,212,0.3)] z-50">
-                    <Key className="w-5 h-5 text-amber-400" />
-                    <span className="text-slate-300 font-bold">Your Secret Code:</span>
-                    <span className="text-amber-400 font-black tracking-widest">{secretPassword}</span>
-                </div>
-            )}
-
-            {/* PHASE: SECRET CODE SELECT */}
+            {/* PHASE 1: SECURE VAULT */}
             {phase === "password_select" && (
-                <div className="z-10 flex flex-col items-center w-full max-w-4xl animate-in zoom-in">
-                    <Rocket className="w-24 h-24 mb-6 text-purple-400 animate-bounce" />
-                    <h1 className="text-4xl md:text-5xl font-black mb-4 text-white text-center drop-shadow-[0_0_15px_rgba(168,85,247,0.5)]">
-                        SECURE YOUR STAR VAULT
+                <div className="z-10 flex flex-col items-center w-full max-w-3xl animate-in zoom-in">
+                    <Shield className="w-24 h-24 mb-6 text-green-500 animate-pulse" />
+                    <h1 className="text-4xl md:text-5xl font-black mb-2 text-green-400 glitch-text text-center" data-text="SECURE YOUR VAULT">
+                        SECURE YOUR VAULT
                     </h1>
-                    <p className="text-slate-400 mb-10 text-center max-w-lg text-lg">
-                        Choose a Secret Code. If an alien tries to raid your vault, they have to guess this exact code!
+                    <p className="text-green-700 mb-10 text-center max-w-lg">
+                        Select one passkey from the 5 generated below. If an enemy breaches your firewall, they must guess this exact key.
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-4 w-full">
                         {selectedPasswords.map(pass => (
-                            <button key={pass} onClick={() => { setSecretPassword(pass); setPhase("question"); }} className="bg-slate-900 border-2 border-purple-700 hover:border-cyan-400 hover:bg-purple-900/40 text-cyan-300 font-bold py-4 rounded-xl transition-all duration-200 shadow-[0_0_15px_rgba(168,85,247,0.2)] hover:shadow-[0_0_25px_rgba(6,182,212,0.5)] text-sm hover:-translate-y-1">
+                            <button key={pass} onClick={() => { setSecretPassword(pass); setPhase("question"); }} className="bg-black border-2 border-green-800 hover:border-green-400 hover:bg-green-900/20 hover:text-green-300 text-green-600 font-bold py-4 rounded transition-all text-sm shadow-[0_0_10px_rgba(34,197,94,0.1)] hover:shadow-[0_0_20px_rgba(34,197,94,0.4)]">
                                 {pass}
                             </button>
                         ))}
@@ -167,96 +157,81 @@ function StarVaultArena({ gameData, onScoreUpdate, onGameEnd }: any) {
                 </div>
             )}
 
-            {/* PHASE: QUESTION */}
+            {/* PHASE 2: QUESTION */}
             {phase === "question" && (
-                <div className="w-full max-w-4xl z-10 animate-in fade-in slide-in-from-bottom-5">
-                    <div className="flex justify-between items-center mb-8 bg-slate-900/80 border border-slate-700 p-4 rounded-2xl shadow-lg">
-                        <span className="text-cyan-400 font-bold flex items-center gap-2"><Star className="w-5 h-5 fill-cyan-400" /> STARDUST COLLECTED</span>
-                        <span className="text-amber-400 font-black text-2xl flex items-center gap-2"><Sparkles size={24} /> {score}</span>
+                <div className="w-full max-w-4xl z-10 animate-in fade-in">
+                    <div className="flex justify-between items-center mb-8 border-b border-green-900 pb-4">
+                        <span className="text-green-500 font-bold flex items-center gap-2 animate-pulse"><Terminal size={18} /> DATA_MINING_PHASE</span>
+                        <span className="text-cyan-400 font-bold text-xl flex items-center gap-2"><Cpu size={18} /> {score} CR</span>
                     </div>
-
-                    <div className="bg-slate-900/90 border border-slate-700 p-8 rounded-3xl shadow-2xl backdrop-blur-md">
-                        <h2 className="text-3xl font-bold text-white text-center mb-8">{question.prompt}</h2>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {question.options.map((opt: string, i: number) => (
-                                <button key={i} onClick={() => handleAnswer(opt)} className="bg-indigo-900/50 border-2 border-indigo-600 hover:border-cyan-400 hover:bg-indigo-800 text-white font-bold py-6 rounded-2xl text-xl transition-all hover:scale-105 hover:shadow-[0_0_20px_rgba(6,182,212,0.4)]">
-                                    {opt}
-                                </button>
-                            ))}
-                        </div>
+                    <h2 className="text-2xl md:text-3xl font-bold text-green-300 text-center mb-8">{question.prompt}</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {question.options.map((opt: string, i: number) => (
+                            <button key={i} onClick={() => handleAnswer(opt)} className="bg-black border border-green-800 hover:bg-green-900/40 text-green-400 font-bold py-6 rounded text-xl transition-all hover:shadow-[0_0_15px_rgba(34,197,94,0.5)]">
+                                {opt}
+                            </button>
+                        ))}
                     </div>
                 </div>
             )}
 
-            {/* PHASE: REWARD */}
+            {/* PHASE 3: REWARD */}
             {phase === "reward" && (
-                <div className="bg-slate-900 border-2 border-cyan-500 rounded-3xl p-10 text-center max-w-md w-full shadow-[0_0_60px_rgba(6,182,212,0.3)] z-10 animate-in zoom-in duration-300">
-                    <h2 className="text-purple-400 mb-4 font-bold tracking-widest uppercase">Alien Pod Opened!</h2>
-                    <div className="text-8xl mb-6 animate-bounce drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]">{rolledPal.emoji}</div>
-                    <h1 className="text-4xl font-black text-white mb-2">{rolledPal.name}</h1>
-                    <p className="text-amber-300 font-bold text-lg mb-8 bg-amber-900/30 p-3 rounded-xl border border-amber-700/50">
-                        {rolledPal.desc}
-                    </p>
-                    <button onClick={applyReward} className="w-full bg-cyan-600 text-white hover:bg-cyan-500 font-black py-4 rounded-2xl text-lg transition-all shadow-[0_0_20px_rgba(6,182,212,0.4)] active:scale-95">
-                        {rolledPal.effect === 'hack' ? "RAID A PLAYER" : "COLLECT STARDUST"}
+                <div className="bg-black border-2 border-green-500 rounded-lg p-10 text-center max-w-md w-full shadow-[0_0_50px_rgba(34,197,94,0.3)] z-10 animate-in zoom-in duration-300">
+                    <h2 className="text-green-700 mb-4 uppercase tracking-[0.2em]">Data Packet Decrypted</h2>
+                    <div className="text-8xl mb-6 animate-bounce">{rolledPal.emoji}</div>
+                    <h1 className="text-4xl font-black text-green-400 mb-2">{rolledPal.name}</h1>
+                    <p className="text-cyan-400 font-bold text-lg mb-8 border border-cyan-900 bg-cyan-950/30 p-2 rounded">{rolledPal.desc}</p>
+                    <button onClick={applyReward} className={`w-full bg-green-900 text-green-300 hover:bg-green-500 hover:text-black font-black py-4 rounded text-lg border-2 transition-all uppercase tracking-widest ${rolledPal.effect === 'hack' ? 'border-red-500 text-red-500 hover:bg-red-500' : 'border-green-500'}`}>
+                        {rolledPal.effect === 'hack' ? "EXECUTE EXPLOIT" : "EXTRACT DATA"}
                     </button>
                 </div>
             )}
 
-            {/* PHASE: HACK */}
+            {/* PHASE 4: HACK */}
             {phase === "hack" && (
                 <div className="z-10 flex flex-col items-center w-full max-w-md animate-in slide-in-from-bottom-10">
-                    <Unlock className="w-20 h-20 mb-4 text-red-400 animate-pulse" />
-                    <h1 className="text-3xl font-black mb-2 text-white text-center">CRACKING THEIR VAULT</h1>
-                    <p className="text-cyan-300 mb-8 text-center text-sm bg-cyan-950/50 p-4 rounded-xl border border-cyan-800">
-                        You found a wormhole! Select the correct Secret Code to steal 25% of their Stardust.
-                    </p>
-
+                    <Fingerprint className="w-20 h-20 mb-4 text-red-500 animate-pulse" />
+                    <h1 className="text-3xl font-black mb-2 text-red-500 text-center">BREACHING FIREWALL</h1>
+                    <p className="text-green-700 mb-8 text-center text-sm">&gt; Bypassing security protocols...<br />&gt; Select correct passkey to steal 25% Credits.</p>
                     {!hackResult ? (
                         <div className="flex flex-col gap-3 w-full">
                             {hackOptions.map(opt => (
-                                <button key={opt} onClick={() => submitHack(opt)} className="bg-slate-900 border-2 border-purple-700 text-cyan-300 font-bold py-4 rounded-xl hover:bg-purple-900/40 transition-all text-center tracking-widest">
-                                    {opt}
+                                <button key={opt} onClick={() => submitHack(opt)} className="bg-black border border-green-800 text-green-500 font-bold py-4 rounded hover:bg-green-900/30 hover:text-green-300 transition-all text-left px-6">
+                                    &gt; INPUT_KEY: {opt}
                                 </button>
                             ))}
-                            <button onClick={() => setHackResult("fail")} className="text-slate-500 hover:text-red-400 mt-6 text-sm text-center font-bold">
-                                [ CANCEL RAID ]
-                            </button>
+                            <button onClick={() => setHackResult("fail")} className="text-slate-600 hover:text-red-500 mt-6 text-sm text-center">[ ABORT SEQUENCE ]</button>
                         </div>
                     ) : (
                         <div className="text-center w-full animate-in zoom-in">
                             {hackResult === 'success' ? (
-                                <div className="border-2 border-emerald-500 bg-emerald-950/40 p-8 rounded-3xl shadow-[0_0_30px_rgba(16,185,129,0.3)]">
-                                    <Zap className="w-20 h-20 mx-auto text-emerald-400 mb-4" />
-                                    <h2 className="text-3xl font-black text-white mb-2">VAULT CRACKED!</h2>
-                                    <p className="text-emerald-300 mb-8 font-bold">Stardust successfully stolen.</p>
+                                <div className="border border-green-500 bg-green-900/20 p-8 rounded">
+                                    <CheckCircle className="w-20 h-20 mx-auto text-green-500 mb-4" />
+                                    <h2 className="text-3xl font-black text-green-400 mb-2">ACCESS GRANTED</h2>
+                                    <p className="text-green-300 mb-8 font-bold">Credits successfully stolen.</p>
+                                    <button onClick={moveToNextQuestion} className="w-full bg-green-900 text-green-300 border border-green-500 py-3 hover:bg-green-500 hover:text-black font-bold">CONTINUE</button>
                                 </div>
                             ) : (
-                                <div className="border-2 border-red-500 bg-red-950/40 p-8 rounded-3xl">
-                                    <Lock className="w-20 h-20 mx-auto text-red-500 mb-4" />
-                                    <h2 className="text-3xl font-black text-white mb-2">CODE FAILED</h2>
-                                    <p className="text-red-300 mb-8 font-bold">Wrong code. The vault locked you out.</p>
+                                <div className="border border-red-500 bg-red-900/20 p-8 rounded">
+                                    <AlertTriangle className="w-20 h-20 mx-auto text-red-500 mb-4" />
+                                    <h2 className="text-3xl font-black text-red-500 mb-2">ACCESS DENIED</h2>
+                                    <p className="text-red-300 mb-8 font-bold">Incorrect passkey. Trace detected.</p>
                                 </div>
                             )}
-                            <button onClick={moveToNextQuestion} className="w-full bg-indigo-600 text-white py-4 mt-4 hover:bg-indigo-500 font-bold rounded-xl transition-all">
-                                CONTINUE
-                            </button>
                         </div>
                     )}
                 </div>
             )}
 
-            {/* PHASE: HACKED (VICTIM) */}
+            {/* PHASE 5: HACKED (VICTIM RECOVERY) */}
             {phase === "hacked" && (
                 <div className="z-10 flex flex-col items-center animate-flicker">
-                    <Lock className="w-32 h-32 mb-6 text-red-500 animate-bounce drop-shadow-[0_0_20px_rgba(239,68,68,0.6)]" />
-                    <h1 className="text-5xl md:text-6xl font-black mb-4 text-white text-center">VAULT LOCKED</h1>
-                    <p className="text-red-200 mb-10 text-center max-w-md text-lg">
-                        An alien raided your vault! Rapidly press the button to reboot your system.
-                    </p>
-                    <button onClick={handlePatchClick} className="bg-slate-900 border-4 border-red-500 text-red-500 font-black px-12 py-8 rounded-full text-2xl hover:bg-red-500 hover:text-white transition-all transform active:scale-90 shadow-[0_0_40px_rgba(239,68,68,0.5)]">
-                        REBOOT ({patchClicks}/10)
+                    <Lock className="w-32 h-32 mb-6 text-red-500 animate-bounce" />
+                    <h1 className="text-5xl md:text-6xl font-black mb-4 text-red-500 text-center glitch-text" data-text="SYSTEM LOCKED">SYSTEM LOCKED</h1>
+                    <p className="text-red-200 mb-10 text-center max-w-md">&gt; UNAUTHORIZED ACCESS DETECTED.<br />&gt; Rapidly execute patch protocol to restore connection.</p>
+                    <button onClick={handlePatchClick} className="bg-black border-2 border-red-500 text-red-500 font-black px-12 py-8 rounded-lg text-2xl hover:bg-red-500 hover:text-black transition-all transform active:scale-95 shadow-[0_0_30px_rgba(239,68,68,0.5)]">
+                        EXECUTE PATCH ({patchClicks}/10)
                     </button>
                 </div>
             )}
@@ -333,7 +308,6 @@ function ClassicArena({ gameData, onScoreUpdate, onGameEnd, isPreview }: any) {
             setScore(newScore);
             if (onScoreUpdate) onScoreUpdate(newScore);
 
-            // Loop questions safely
             setCurrentQ((currentQ + 1) % gameData.questions.length);
         } else {
             setStreak(0);
