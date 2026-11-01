@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { submitAssignment } from "@/app/actions/submissions";
-import { ArrowLeft, CheckCircle, Loader2, Save } from "lucide-react";
+import { ArrowLeft, CheckCircle, Loader2, Save, LogOut, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 
 export default function TakeAssignment() {
@@ -19,6 +19,7 @@ export default function TakeAssignment() {
     const [submitting, setSubmitting] = useState(false);
     const [completed, setCompleted] = useState(false);
     const [violations, setViolations] = useState<string[]>([]);
+    const [showViolationWarning, setShowViolationWarning] = useState(false);
 
     useEffect(() => {
         async function fetchAssignment() {
@@ -29,24 +30,30 @@ export default function TakeAssignment() {
         fetchAssignment();
     }, [assignmentId, supabase]);
 
-    // Anti-cheat: Track tab switching if lock mode is enabled
+    // 🚨 ANTI-CHEAT: Kicks them out if Lock Mode is on
     useEffect(() => {
         if (!assignment?.settings?.lockMode) return;
 
         const handleVisibilityChange = () => {
             if (document.hidden) {
-                setViolations(prev => [...prev, "Tab switched or minimized during quiz"]);
-                alert("⚠️ Warning: Do not leave the tab! This violation has been logged.");
+                const newViolations = [...violations, "Tab switched during quiz"];
+                setViolations(newViolations);
+                setShowViolationWarning(true);
+
+                // If they leave 3 times, auto-fail and submit
+                if (newViolations.length >= 3) {
+                    alert("❌ QUIZ FAILED: You left the tab 3 times. Submitting your current answers now.");
+                    handleSubmit(true); // Force submit
+                }
             }
         };
         document.addEventListener("visibilitychange", handleVisibilityChange);
         return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-    }, [assignment]);
+    }, [assignment, violations]);
 
-    const handleSubmit = async () => {
+    const handleSubmit = async (forceQuit = false) => {
         setSubmitting(true);
 
-        // Safely get the student ID
         const getCookie = (name: string) => {
             const value = `; ${document.cookie}`;
             const parts = value.split(`; ${name}=`);
@@ -61,23 +68,12 @@ export default function TakeAssignment() {
                 assignmentTitle: assignment.title,
                 studentId: studentId,
                 content: answers,
-                violations: violations
+                violations: forceQuit ? [...violations, "FORCED QUIT: Failed Anti-Cheat"] : violations
             });
             setCompleted(true);
         } catch (err: any) {
             alert("Failed to submit: " + err.message);
-        } finally {
             setSubmitting(false);
-        }
-    };
-
-    // Handle Checkbox selections
-    const toggleCheckbox = (questionId: string, option: string) => {
-        const current = answers[questionId] || [];
-        if (current.includes(option)) {
-            setAnswers({ ...answers, [questionId]: current.filter((o: string) => o !== option) });
-        } else {
-            setAnswers({ ...answers, [questionId]: [...current, option] });
         }
     };
 
@@ -103,87 +99,64 @@ export default function TakeAssignment() {
 
     return (
         <div className="min-h-screen bg-slate-950 p-8 flex flex-col items-center">
+            {/* ANTI-CHEAT WARNING POPUP */}
+            {showViolationWarning && !completed && (
+                <div className="fixed inset-0 z-50 bg-red-950/90 flex items-center justify-center backdrop-blur-md p-4">
+                    <div className="bg-black border-2 border-red-500 p-8 rounded-3xl max-w-md text-center">
+                        <AlertTriangle className="w-20 h-20 text-red-500 mx-auto mb-4 animate-pulse" />
+                        <h2 className="text-3xl font-black text-red-500 mb-2">WARNING</h2>
+                        <p className="text-red-200 mb-6">You left the tab! This violation has been logged and sent to the principal. If you do this 3 times, your quiz will automatically fail.</p>
+                        <button onClick={() => setShowViolationWarning(false)} className="bg-red-600 text-white font-bold px-8 py-3 rounded-xl hover:bg-red-500 w-full">Return to Quiz</button>
+                    </div>
+                </div>
+            )}
+
             <div className="w-full max-w-3xl">
-                <Link href="/student/assignments" className="flex items-center gap-2 text-slate-400 hover:text-white mb-6 font-bold">
-                    <ArrowLeft size={20} /> Back to Assignments
-                </Link>
+                <div className="flex justify-between items-center mb-6">
+                    <Link href="/student/assignments" className="inline-flex items-center gap-2 text-slate-400 hover:text-white font-bold">
+                        <ArrowLeft size={20} /> Back
+                    </Link>
+                    <button onClick={() => {
+                        if (confirm("Are you sure you want to quit? Your progress will be lost.")) router.push("/student/assignments");
+                    }} className="text-red-400 hover:text-white bg-red-500/10 hover:bg-red-500 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all">
+                        <LogOut size={18} /> Quit Quiz
+                    </button>
+                </div>
 
                 <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 shadow-2xl">
                     <h1 className="text-3xl font-extrabold text-white mb-2">{assignment.title}</h1>
                     <p className="text-slate-400 mb-8">{assignment.description}</p>
 
-                    {questions.length === 0 ? (
-                        <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 text-center text-slate-500">
-                            This assignment has no questions.
-                        </div>
-                    ) : (
-                        <div className="space-y-6">
-                            {questions.map((q: any, index: number) => (
-                                <div key={q.id} className="bg-slate-950 p-6 rounded-2xl border border-slate-800">
-                                    <h3 className="text-lg font-bold text-white mb-4">{index + 1}. {q.label}</h3>
+                    <div className="space-y-6">
+                        {questions.map((q: any, index: number) => (
+                            <div key={q.id} className="bg-slate-950 p-6 rounded-2xl border border-slate-800">
+                                <h3 className="text-lg font-bold text-white mb-4">{index + 1}. {q.label}</h3>
 
-                                    {q.type === "short_text" && (
-                                        <input
-                                            type="text"
-                                            className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 outline-none focus:border-pink-500 transition-colors"
-                                            placeholder="Your answer..."
-                                            value={answers[q.id] || ""}
-                                            onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                                        />
-                                    )}
+                                {(q.type === "short_text" || q.type === "long_text") && (
+                                    <input
+                                        type="text"
+                                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 outline-none focus:border-pink-500 transition-colors"
+                                        placeholder="Your answer..."
+                                        value={answers[q.id] || ""}
+                                        onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
+                                    />
+                                )}
 
-                                    {q.type === "long_text" && (
-                                        <textarea
-                                            className="w-full h-32 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 outline-none focus:border-pink-500 resize-none transition-colors"
-                                            placeholder="Your answer..."
-                                            value={answers[q.id] || ""}
-                                            onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                                        />
-                                    )}
+                                {q.type === "multiple_choice" && (
+                                    <div className="space-y-3">
+                                        {q.options?.map((opt: string) => (
+                                            <label key={opt} className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${answers[q.id] === opt ? 'border-pink-500 bg-pink-500/10' : 'border-slate-800 hover:border-slate-600'}`}>
+                                                <input type="radio" name={q.id} value={opt} checked={answers[q.id] === opt} onChange={() => setAnswers({ ...answers, [q.id]: opt })} className="w-5 h-5 text-pink-500 bg-slate-900 border-slate-700 focus:ring-pink-500" />
+                                                <span className="text-white font-medium">{opt}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
 
-                                    {q.type === "multiple_choice" && (
-                                        <div className="space-y-3">
-                                            {q.options?.map((opt: string) => (
-                                                <label key={opt} className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${answers[q.id] === opt ? 'border-pink-500 bg-pink-500/10' : 'border-slate-800 hover:border-slate-600'}`}>
-                                                    <input
-                                                        type="radio"
-                                                        name={q.id}
-                                                        value={opt}
-                                                        checked={answers[q.id] === opt}
-                                                        onChange={() => setAnswers({ ...answers, [q.id]: opt })}
-                                                        className="w-5 h-5 text-pink-500 bg-slate-900 border-slate-700 focus:ring-pink-500"
-                                                    />
-                                                    <span className="text-white font-medium">{opt}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {q.type === "checkboxes" && (
-                                        <div className="space-y-3">
-                                            {q.options?.map((opt: string) => (
-                                                <label key={opt} className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${(answers[q.id] || []).includes(opt) ? 'border-pink-500 bg-pink-500/10' : 'border-slate-800 hover:border-slate-600'}`}>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={(answers[q.id] || []).includes(opt)}
-                                                        onChange={() => toggleCheckbox(q.id, opt)}
-                                                        className="w-5 h-5 text-pink-500 bg-slate-900 border-slate-700 rounded focus:ring-pink-500"
-                                                    />
-                                                    <span className="text-white font-medium">{opt}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    <button
-                        onClick={handleSubmit}
-                        disabled={submitting || questions.length === 0}
-                        className="w-full mt-8 bg-pink-600 hover:bg-pink-500 text-white font-black py-4 rounded-xl text-lg flex justify-center gap-2 transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(236,72,153,0.3)]"
-                    >
+                    <button onClick={() => handleSubmit()} disabled={submitting || questions.length === 0} className="w-full mt-8 bg-pink-600 hover:bg-pink-500 text-white font-black py-4 rounded-xl text-lg flex justify-center gap-2 transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(236,72,153,0.3)]">
                         {submitting ? <><Loader2 className="animate-spin" /> Submitting...</> : <><Save size={20} /> Submit Assignment</>}
                     </button>
                 </div>
