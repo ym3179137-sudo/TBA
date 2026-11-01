@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { cookies } from "next/headers";
-import { Gamepad2, Box, BookOpen, Video, LogOut, FileText, Play, Radio } from "lucide-react";
+import { Gamepad2, Box, BookOpen, Video, LogOut, FileText, Play, Radio, CheckSquare } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
 import studentBg from "@/pic/100a5ec1-5f72-4fa8-bf39-6a9868de1337.jpg";
@@ -25,14 +25,22 @@ export default async function StudentDashboard() {
     const coins = studentData?.coins || 0;
     const className = studentData?.class_name || "KG1";
 
+    // Fetch Live Sessions
     const { data: liveSessions } = await supabaseAdmin.from("live_sessions").select("*").eq("is_active", true).limit(1);
     const isLive = liveSessions && liveSessions.length > 0;
 
+    // Fetch Presentations
     const { data: presentations } = await supabaseAdmin.from("presentations").select("*").order('created_at', { ascending: false });
     const myPresentations = presentations?.filter(p =>
         p.target_type === 'all' ||
         (p.target_type === 'grade' && p.target_value === className) ||
         (p.target_type === 'student' && p.target_value === studentId)
+    ) || [];
+
+    // 🚨 Fetch Assignments for this student
+    const { data: allAssignments } = await supabaseAdmin.from("assignments").select("*");
+    const myAssignments = allAssignments?.filter(a =>
+        a.target_grade === className || a.target_student_id === studentId
     ) || [];
 
     return (
@@ -107,16 +115,29 @@ export default async function StudentDashboard() {
                         </div>
                     )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <Link href="/student/avatar" className="bg-slate-900/85 border-2 border-indigo-500/50 p-6 rounded-2xl md:rounded-3xl backdrop-blur-md hover:bg-slate-800/90 transition-all flex items-center md:flex-col gap-4 md:text-center">
+                    {/* 🚨 4 Main Buttons */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <Link href="/student/avatar" className="bg-slate-900/85 border-2 border-indigo-500/50 p-6 rounded-2xl md:rounded-3xl backdrop-blur-md hover:bg-slate-800/90 transition-all flex flex-col items-center gap-4 text-center">
                             <Box className="w-10 h-10 text-indigo-400 shrink-0" />
                             <h2 className="text-lg md:text-xl font-bold text-white">Avatar Studio</h2>
                         </Link>
-                        <Link href="/student/games" className="bg-slate-900/85 border-2 border-emerald-500/50 p-6 rounded-2xl md:rounded-3xl backdrop-blur-md hover:bg-slate-800/90 transition-all flex items-center md:flex-col gap-4 md:text-center">
+                        <Link href="/student/games" className="bg-slate-900/85 border-2 border-emerald-500/50 p-6 rounded-2xl md:rounded-3xl backdrop-blur-md hover:bg-slate-800/90 transition-all flex flex-col items-center gap-4 text-center">
                             <Gamepad2 className="w-10 h-10 text-emerald-400 shrink-0" />
                             <h2 className="text-lg md:text-xl font-bold text-white">Arcade Arena</h2>
                         </Link>
-                        <Link href="/student/classroom" className="bg-slate-900/85 border-2 border-blue-500/50 p-6 rounded-2xl md:rounded-3xl backdrop-blur-md hover:bg-slate-800/90 transition-all flex items-center md:flex-col gap-4 md:text-center">
+
+                        {/* 🚨 The New Assignments Button */}
+                        <Link href="/student/assignments" className="bg-slate-900/85 border-2 border-pink-500/50 p-6 rounded-2xl md:rounded-3xl backdrop-blur-md hover:bg-slate-800/90 transition-all flex flex-col items-center gap-4 text-center relative">
+                            <FileText className="w-10 h-10 text-pink-400 shrink-0" />
+                            <h2 className="text-lg md:text-xl font-bold text-white">Assignments</h2>
+                            {myAssignments.length > 0 && (
+                                <span className="absolute top-2 right-2 bg-pink-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
+                                    {myAssignments.length} New
+                                </span>
+                            )}
+                        </Link>
+
+                        <Link href="/student/classroom" className="bg-slate-900/85 border-2 border-blue-500/50 p-6 rounded-2xl md:rounded-3xl backdrop-blur-md hover:bg-slate-800/90 transition-all flex flex-col items-center gap-4 text-center">
                             <Video className="w-10 h-10 text-blue-400 shrink-0" />
                             <h2 className="text-lg md:text-xl font-bold text-white">Live Classroom</h2>
                         </Link>
