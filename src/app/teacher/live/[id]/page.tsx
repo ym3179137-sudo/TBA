@@ -28,7 +28,7 @@ export default function TeacherLivePresenter() {
 
     const prevPointRef = useRef<{ x: number, y: number } | null>(null);
 
-    // Fix canvas sizing so it doesn't cover the buttons
+    // Fix canvas sizing so it perfectly matches the container
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
@@ -48,6 +48,7 @@ export default function TeacherLivePresenter() {
         return () => window.removeEventListener('resize', updateSize);
     }, [presentation]);
 
+    // Laser fade effect
     useEffect(() => {
         let animationFrameId: number;
         const fade = () => {
@@ -76,6 +77,15 @@ export default function TeacherLivePresenter() {
 
             const { data: pres } = await supabase.from("presentations").select("*").eq("id", presentationId).single();
             if (!pres) return router.push("/teacher/library");
+
+            // 🚨 CHECK: If it's an uploaded PowerPoint, stop them! 
+            // The Microsoft iframe breaks slide syncing and drawing.
+            if (pres.file_url) {
+                alert("⚠️ Slide sync and drawing do NOT work with uploaded PowerPoint files. Please use an AI-generated presentation to go live.");
+                router.push("/teacher/library");
+                return;
+            }
+
             setPresentation(pres);
 
             await supabase.from("live_sessions").update({ is_active: false }).eq("teacher_id", user.id).eq("is_active", true);
@@ -97,7 +107,9 @@ export default function TeacherLivePresenter() {
                         const students = users.filter((u: any) => u.role === 'student');
                         setAttendance(students);
                     })
-                    .subscribe();
+                    .subscribe((status: string) => {
+                        console.log('Teacher Realtime Status:', status);
+                    });
             }
             setLoading(false);
         }
@@ -251,7 +263,7 @@ export default function TeacherLivePresenter() {
             onMouseUp={stopDraw}
             onMouseLeave={stopDraw}
         >
-            {/* TOP TOOLBAR */}
+            {/* TOP TOOLBAR (Z-index 100 so it sits above the canvas) */}
             <div className="p-4 bg-red-600 text-white flex justify-between items-center relative z-[100]">
                 <div className="flex items-center gap-3 font-bold text-lg">
                     <span className="relative flex h-3 w-3"><span className="animate-ping absolute h-full w-full rounded-full bg-white opacity-75"></span><span className="relative rounded-full h-3 w-3 bg-white"></span></span>
@@ -277,11 +289,8 @@ export default function TeacherLivePresenter() {
             </div>
 
             <div className="flex-1 overflow-hidden relative" ref={containerRef}>
-                {presentation.file_url ? (
-                    <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(presentation.file_url)}`} className="w-full h-full border-none pointer-events-none" />
-                ) : (
-                    <DeckViewer deck={presentation.deck_data} externalSlide={currentSlide} onSlideChange={handleSlideChange} />
-                )}
+                {/* Since we blocked file_url above, this will always render the DeckViewer now! */}
+                <DeckViewer deck={presentation.deck_data} externalSlide={currentSlide} onSlideChange={handleSlideChange} />
 
                 <canvas
                     ref={canvasRef}
