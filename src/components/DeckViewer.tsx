@@ -8,7 +8,6 @@ export default function DeckViewer({ deck, externalSlide }: any) {
     const [imgLoading, setImgLoading] = useState(true);
     const [imgError, setImgError] = useState(false);
 
-    // Listen to the teacher's slide changes
     useEffect(() => {
         if (externalSlide !== undefined && externalSlide !== currentSlide) {
             setCurrentSlide(externalSlide);
@@ -29,24 +28,8 @@ export default function DeckViewer({ deck, externalSlide }: any) {
         .replace(/[^a-zA-Z0-9 ]/g, "")
         .substring(0, 100);
 
-    const imageUrl = `/api/generate-image?prompt=${encodeURIComponent(cleanPrompt)}&seed=${currentSlide}`;
-
-    // 🚨 PRE-LOAD THE NEXT IMAGE IN THE BACKGROUND
-    useEffect(() => {
-        if (!deck.slides) return;
-        const nextIndex = currentSlide + 1;
-        if (nextIndex < deck.slides.length) {
-            const nextSlide = deck.slides[nextIndex];
-            const nextPrompt = (nextSlide.imagePrompt || nextSlide.heading || "cute cartoon education")
-                .replace(/[^a-zA-Z0-9 ]/g, "")
-                .substring(0, 100);
-            const nextImageUrl = `/api/generate-image?prompt=${encodeURIComponent(nextPrompt)}&seed=${nextIndex}`;
-
-            // This forces the browser to cache the image
-            const img = new Image();
-            img.src = nextImageUrl;
-        }
-    }, [currentSlide, deck]);
+    // 🚨 USE SAVED IMAGE IF IT EXISTS
+    const imageUrl = slide.savedImage || `/api/generate-image?prompt=${encodeURIComponent(cleanPrompt)}&seed=${currentSlide}`;
 
     return (
         <div className="relative w-full h-full flex flex-col bg-slate-950">
@@ -91,7 +74,7 @@ export default function DeckViewer({ deck, externalSlide }: any) {
                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 p-8 text-center">
                                 <ImageOff className="w-12 h-12 text-indigo-400 mb-4 opacity-50" />
                                 <p className="text-white font-bold text-2xl mb-2">{slide.heading}</p>
-                                <p className="text-slate-400 text-sm max-w-xs">The AI image failed to load. Try generating again.</p>
+                                <p className="text-slate-400 text-sm max-w-xs">The AI image failed to load.</p>
                             </div>
                         ) : (
                             <img

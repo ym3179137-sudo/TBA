@@ -27,14 +27,16 @@ export default function TeacherHub() {
     const [deckData, setDeckData] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
 
+    // 🚨 NEW: State for baking images
+    const [bakingImages, setBakingImages] = useState(false);
+    const [bakeProgress, setBakeProgress] = useState(0);
+
     const [isEditing, setIsEditing] = useState(false);
     const [activeSlideIndex, setActiveSlideIndex] = useState(0);
-    const [isExporting, setIsExporting] = useState(false);
 
     const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
     const [targetType, setTargetType] = useState<'grade' | 'student'>('grade');
     const [targetValue, setTargetValue] = useState("KG1");
-    const [studentsList, setStudentsList] = useState<{ id: string, full_name: string }[]>([]);
     const [isPublishing, setIsPublishing] = useState(false);
 
     const handlePptxUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -78,6 +80,36 @@ export default function TeacherHub() {
         }
     };
 
+    // 🚨 NEW: Bakes the AI images into the JSON so they load instantly for students
+    const bakeImages = async (deck: any) => {
+        setBakingImages(true);
+        const newDeck = JSON.parse(JSON.stringify(deck));
+
+        for (let i = 0; i < newDeck.slides.length; i++) {
+            const slide = newDeck.slides[i];
+            const prompt = (slide.imagePrompt || slide.heading || "cute cartoon education").replace(/[^a-zA-Z0-9 ]/g, "").substring(0, 100);
+            const url = `/api/generate-image?prompt=${encodeURIComponent(prompt)}&seed=${i}`;
+
+            try {
+                const res = await fetch(url);
+                const blob = await res.blob();
+                // Convert to Base64 so it's saved inside the presentation itself
+                const base64 = await new Promise<string>((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.readAsDataURL(blob);
+                });
+                newDeck.slides[i].savedImage = base64;
+            } catch (e) {
+                console.error("Failed to bake image for slide", i);
+            }
+            setBakeProgress(i + 1);
+        }
+
+        setBakingImages(false);
+        return newDeck;
+    };
+
     async function handleGenerate(e: React.FormEvent) {
         e.preventDefault();
         if (!lessonText) return setError("Please enter some lesson content or upload a PPTX.");
@@ -94,7 +126,10 @@ export default function TeacherHub() {
             });
             if (!res.ok) throw new Error("Failed to generate presentation");
             const data = await res.json();
-            setDeckData(data.deck);
+
+            // Bake the images in immediately
+            const bakedDeck = await bakeImages(data.deck);
+            setDeckData(bakedDeck);
             setActiveSlideIndex(0);
         } catch (err: any) {
             setError(err.message || "Something went wrong.");
@@ -107,28 +142,10 @@ export default function TeacherHub() {
         setDeckData((prev: any) => {
             const newDeck = { ...prev };
             newDeck.slides[index][field] = value;
+            // If they change the image prompt, delete the saved image so it regenerates
+            if (field === 'imagePrompt') newDeck.slides[index].savedImage = null;
             return newDeck;
         });
-    };
-
-    const handleExportPPTX = async () => {
-        if (!deckData) return;
-        setIsExporting(true);
-        try {
-            const pptx = new pptxgen();
-            pptx.layout = "LAYOUT_16x9";
-            deckData.slides.forEach((slide: any) => {
-                const pptSlide = pptx.addSlide();
-                pptSlide.addText(slide.heading || "Slide", { x: 0.5, y: 0.5, w: "90%", h: 1, fontSize: 36, bold: true, color: "363636" });
-                const bulletPoints = slide.bullets.map((b: string) => ({ text: b, options: { bullet: true } }));
-                pptSlide.addText(bulletPoints, { x: 0.5, y: 1.5, w: "90%", h: 2, fontSize: 24, color: "666666" });
-            });
-            await pptx.writeFile({ fileName: `${deckData.title || "Presentation"}.pptx` });
-        } catch (err) {
-            alert("Failed to export PowerPoint file.");
-        } finally {
-            setIsExporting(false);
-        }
     };
 
     const handlePublish = async () => {
@@ -191,8 +208,6 @@ export default function TeacherHub() {
 
             {/* MAIN CONTENT */}
             <main className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden relative">
-
-                {/* Creator Panel */}
                 <div className="w-full lg:w-[450px] bg-slate-900/50 border-b lg:border-b-0 lg:border-r border-slate-800 flex flex-col p-4 md:p-8 shrink-0 overflow-y-auto">
                     {isEditing && deckData ? (
                         <div className="pb-10">
@@ -201,17 +216,13 @@ export default function TeacherHub() {
                                 <button onClick={() => setIsEditing(false)} className="bg-emerald-500 text-slate-950 px-4 py-2 rounded-xl text-sm font-bold shadow-lg">Done</button>
                             </div>
 
-                            {/* Slide Selector Thumbnails */}
                             <div className="flex gap-2 overflow-x-auto pb-4 hide-scrollbar mb-2">
                                 {deckData.slides.map((_: any, i: number) => (
                                     <button key={i} onClick={() => setActiveSlideIndex(i)} className={`shrink-0 w-10 h-10 rounded-lg font-bold ${activeSlideIndex === i ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>{i + 1}</button>
                                 ))}
                             </div>
 
-                            {/* Editor Controls */}
                             <div className="space-y-5 bg-slate-950 p-5 rounded-2xl border border-slate-800">
-
-                                {/* Layout Picker */}
                                 <div>
                                     <label className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
                                         <LayoutTemplate size={14} /> Slide Layout
@@ -227,39 +238,22 @@ export default function TeacherHub() {
                                     </select>
                                 </div>
 
-                                {/* Heading */}
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Slide Heading</label>
-                                    <input
-                                        type="text"
-                                        value={deckData.slides[activeSlideIndex].heading || ""}
-                                        onChange={(e) => updateSlide(activeSlideIndex, 'heading', e.target.value)}
-                                        className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 font-bold text-lg"
-                                    />
+                                    <input type="text" value={deckData.slides[activeSlideIndex].heading || ""} onChange={(e) => updateSlide(activeSlideIndex, 'heading', e.target.value)} className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 font-bold text-lg" />
                                 </div>
 
-                                {/* Bullets */}
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Bullet Points (One per line)</label>
-                                    <textarea
-                                        value={deckData.slides[activeSlideIndex].bullets?.join('\n') || ""}
-                                        onChange={(e) => updateSlide(activeSlideIndex, 'bullets', e.target.value.split('\n'))}
-                                        className="w-full h-32 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm resize-none"
-                                    />
+                                    <textarea value={deckData.slides[activeSlideIndex].bullets?.join('\n') || ""} onChange={(e) => updateSlide(activeSlideIndex, 'bullets', e.target.value.split('\n'))} className="w-full h-32 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm resize-none" />
                                 </div>
 
-                                {/* AI Image Prompt */}
                                 <div>
                                     <label className="flex items-center gap-2 text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
                                         <ImageIcon size={14} /> AI Image Prompt
                                     </label>
-                                    <textarea
-                                        value={deckData.slides[activeSlideIndex].imagePrompt || ""}
-                                        onChange={(e) => updateSlide(activeSlideIndex, 'imagePrompt', e.target.value)}
-                                        placeholder="e.g., A cute cartoon dog teaching a math class..."
-                                        className="w-full h-20 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm resize-none text-emerald-300"
-                                    />
-                                    <p className="text-[10px] text-slate-500 mt-1">Changing this will generate a new AI image for this slide.</p>
+                                    <textarea value={deckData.slides[activeSlideIndex].imagePrompt || ""} onChange={(e) => updateSlide(activeSlideIndex, 'imagePrompt', e.target.value)} placeholder="e.g., A cute cartoon dog teaching a math class..." className="w-full h-20 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm resize-none text-emerald-300" />
+                                    <p className="text-[10px] text-slate-500 mt-1">Changing this will generate a new AI image when you hit Done.</p>
                                 </div>
                             </div>
 
@@ -309,8 +303,14 @@ export default function TeacherHub() {
                                 </div>
 
                                 <textarea placeholder="Paste your lesson notes here..." value={lessonText} onChange={e => setLessonText(e.target.value)} required className="w-full h-48 bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 resize-none text-sm" />
-                                <button type="submit" disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-4 rounded-xl shadow-lg flex justify-center gap-2 disabled:opacity-50">
-                                    {loading ? <><Loader2 className="animate-spin w-5 h-5" /> Generating...</> : <><Sparkles className="w-5 h-5" /> Generate Presentation</>}
+                                <button type="submit" disabled={loading || bakingImages} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-4 rounded-xl shadow-lg flex justify-center gap-2 disabled:opacity-50">
+                                    {loading ? (
+                                        <><Loader2 className="animate-spin w-5 h-5" /> Generating Text...</>
+                                    ) : bakingImages ? (
+                                        <><Loader2 className="animate-spin w-5 h-5" /> Baking Images ({bakeProgress}/{deckData?.slides?.length || 5})...</>
+                                    ) : (
+                                        <><Sparkles className="w-5 h-5" /> Generate Presentation</>
+                                    )}
                                 </button>
                             </form>
                         </div>
@@ -319,8 +319,8 @@ export default function TeacherHub() {
 
                 {/* Preview Panel */}
                 <div className="flex-1 flex items-center justify-center p-4 min-h-[400px] lg:min-h-0 bg-slate-950 relative">
-                    {loading ? (
-                        <div className="text-emerald-500 animate-pulse font-bold flex flex-col items-center"><Loader2 className="animate-spin w-8 h-8 mb-4" /> Designing slides...</div>
+                    {loading || bakingImages ? (
+                        <div className="text-emerald-500 animate-pulse font-bold flex flex-col items-center"><Loader2 className="animate-spin w-8 h-8 mb-4" /> Preparing Slides...</div>
                     ) : deckData ? (
                         <div className="w-full h-full max-w-6xl rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative bg-slate-900 flex flex-col">
                             <button onClick={() => setIsEditing(!isEditing)} className="absolute top-4 right-4 z-50 bg-indigo-600/90 text-white px-4 py-2 rounded-lg font-bold text-sm"><Edit3 size={14} className="inline mr-1" /> {isEditing ? "Close Editor" : "Edit Slides"}</button>

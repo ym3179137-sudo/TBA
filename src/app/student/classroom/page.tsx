@@ -16,10 +16,6 @@ export default function StudentClassroom() {
     const laserCanvasRef = useRef<HTMLCanvasElement>(null);
     const channelRef = useRef<any>(null);
 
-    // Track previous points for drawing
-    const prevPointRef = useRef<{ x: number, y: number } | null>(null);
-
-    // 🚨 FIXED: Set canvas size to the full window so coordinates match
     useEffect(() => {
         const updateSize = () => {
             const w = window.innerWidth;
@@ -38,7 +34,7 @@ export default function StudentClassroom() {
         return () => window.removeEventListener('resize', updateSize);
     }, [liveData]);
 
-    const laserPoints = useRef<{ x: number; y: number; life: number }[]>([]);
+    const laserPoints = useRef<{ x: number; y: number; life: number; color: string }[]>([]);
     useEffect(() => {
         let animationFrameId: number;
         const render = () => {
@@ -52,10 +48,12 @@ export default function StudentClassroom() {
                         if (p.life > 0) {
                             ctx.beginPath();
                             ctx.arc(p.x * canvas.width, p.y * canvas.height, 6, 0, Math.PI * 2);
-                            ctx.fillStyle = `rgba(239, 68, 68, ${p.life})`;
+                            ctx.fillStyle = p.color;
+                            ctx.globalAlpha = p.life;
                             ctx.shadowBlur = 15;
-                            ctx.shadowColor = '#ef4444';
+                            ctx.shadowColor = p.color;
                             ctx.fill();
+                            ctx.globalAlpha = 1.0;
                         }
                     });
                     ctx.shadowBlur = 0;
@@ -113,40 +111,45 @@ export default function StudentClassroom() {
                 if (ctx && canvasRef.current) {
                     ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
                 }
-                prevPointRef.current = null;
             })
             .on('broadcast', { event: 'laser' }, (payload: any) => {
-                laserPoints.current.push({ x: payload.payload.x, y: payload.payload.y, life: 1.0 });
+                laserPoints.current.push({ x: payload.payload.x, y: payload.payload.y, life: 1.0, color: payload.payload.color || "#ef4444" });
             })
             .on('broadcast', { event: 'draw' }, (payload: any) => {
                 const ctx = canvasRef.current?.getContext('2d');
                 if (ctx && canvasRef.current) {
-                    const { x, y, prevX, prevY } = payload.payload;
+                    const { x, y, prevX, prevY, color, tool } = payload.payload;
                     ctx.beginPath();
                     ctx.moveTo(prevX * canvasRef.current.width, prevY * canvasRef.current.height);
                     ctx.lineTo(x * canvasRef.current.width, y * canvasRef.current.height);
-                    ctx.strokeStyle = "#ef4444";
-                    ctx.lineWidth = 4;
+                    ctx.strokeStyle = color || "#ef4444";
+                    ctx.lineWidth = tool === 'highlighter' ? 20 : 5;
+                    ctx.globalAlpha = tool === 'highlighter' ? 0.3 : 1.0;
                     ctx.lineCap = "round";
                     ctx.lineJoin = "round";
                     ctx.stroke();
+                    ctx.globalAlpha = 1.0;
                 }
             })
             .on('broadcast', { event: 'dot' }, (payload: any) => {
                 const ctx = canvasRef.current?.getContext('2d');
                 if (ctx && canvasRef.current) {
+                    const { x, y, color, tool } = payload.payload;
                     ctx.beginPath();
-                    ctx.arc(payload.payload.x * canvasRef.current.width, payload.payload.y * canvasRef.current.height, 3, 0, Math.PI * 2);
-                    ctx.fillStyle = "#ef4444";
+                    ctx.arc(x * canvasRef.current.width, y * canvasRef.current.height, tool === 'highlighter' ? 10 : 3, 0, Math.PI * 2);
+                    ctx.fillStyle = color || "#ef4444";
+                    ctx.globalAlpha = tool === 'highlighter' ? 0.3 : 1.0;
                     ctx.fill();
+                    ctx.globalAlpha = 1.0;
                 }
             })
             .on('broadcast', { event: 'text' }, (payload: any) => {
                 const ctx = canvasRef.current?.getContext('2d');
                 if (ctx && canvasRef.current) {
-                    ctx.fillStyle = "#ef4444";
-                    ctx.font = "bold 30px Arial";
-                    ctx.fillText(payload.payload.text, payload.payload.x * canvasRef.current.width, payload.payload.y * canvasRef.current.height);
+                    const { text, x, y, color } = payload.payload;
+                    ctx.fillStyle = color || "#ef4444";
+                    ctx.font = "bold 40px Arial";
+                    ctx.fillText(text, x * canvasRef.current.width, y * canvasRef.current.height);
                 }
             })
             .on('broadcast', { event: 'clear' }, () => {
@@ -154,7 +157,7 @@ export default function StudentClassroom() {
                 if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
             })
             .subscribe(async (status: string) => {
-                console.log("Student Channel Status:", status); // 🚨 Check console to see if it connects
+                console.log("Student Channel Status:", status);
                 if (status === 'SUBSCRIBED') {
                     await channelRef.current.track({ role: 'student', name: studentName });
                 }
@@ -163,7 +166,6 @@ export default function StudentClassroom() {
 
     if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
 
-    // 🚨 THE "MOVIE" VIEW
     if (liveData) {
         return (
             <div className="h-screen w-screen bg-black flex flex-col overflow-hidden relative">
@@ -178,7 +180,6 @@ export default function StudentClassroom() {
                         externalSlide={currentSlide}
                     />
 
-                    {/* DRAWING CANVASES (Forced to fill the screen) */}
                     <canvas ref={canvasRef} className="absolute inset-0 z-40 pointer-events-none w-full h-full" />
                     <canvas ref={laserCanvasRef} className="absolute inset-0 z-50 pointer-events-none w-full h-full" />
                 </div>
@@ -186,7 +187,6 @@ export default function StudentClassroom() {
         );
     }
 
-    // Inactive screen
     return (
         <div className="min-h-screen bg-slate-950 flex flex-col items-center p-8 font-sans">
             <div className="w-full max-w-4xl mt-20">
