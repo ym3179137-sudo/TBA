@@ -12,26 +12,39 @@ export default function StudentAssignments() {
 
     useEffect(() => {
         async function fetchAssignments() {
-            const studentId = localStorage.getItem("tba_student_id") || "";
-            // Get class name from cookie or fallback
             const getCookie = (name: string) => {
                 const value = `; ${document.cookie}`;
                 const parts = value.split(`; ${name}=`);
                 if (parts.length === 2) return parts.pop()?.split(';').shift();
                 return "";
             };
-            const className = getCookie("student_class") || "KG1"; // Use cookie or default
+            const studentId = getCookie("student_id") || localStorage.getItem("tba_student_id") || "";
 
-            // Fetch assignments assigned to this grade or student
+            // 1. Get the student's real class from the database (if they are a real student)
+            let studentClass = "KG1";
+            if (studentId && !studentId.startsWith("guest-")) {
+                const { data: child } = await supabase.from("children").select("class_name").eq("id", studentId).maybeSingle();
+                if (child?.class_name) studentClass = child.class_name;
+            }
+
+            // 2. Fetch assignments
             const { data: allAssignments } = await supabase.from("assignments").select("*").order("created_at", { ascending: false });
 
-            // Fetch submissions so we know what is already done
-            const { data: mySubmissions } = await supabase.from("submissions").select("assignment_id").eq("student_id", studentId);
-            const completedIds = mySubmissions?.map(s => s.assignment_id) || [];
+            // 3. Safely fetch submissions ONLY if the ID is a valid UUID (prevents 400 error)
+            let completedIds: string[] = [];
+            if (studentId && studentId.length > 20) { // Simple check if it's a real UUID
+                const { data: mySubmissions } = await supabase.from("submissions").select("assignment_id").eq("student_id", studentId);
+                if (mySubmissions) completedIds = mySubmissions.map(s => s.assignment_id);
+            }
 
-            const filtered = allAssignments?.filter(a =>
-                a.target_grade === className || a.target_student_id === studentId
-            ).map(a => ({
+            // 4. Filter assignments
+            const filtered = allAssignments?.filter(a => {
+                // If guest, show everything so you can test it!
+                if (studentId.startsWith("guest-")) return true;
+
+                // Otherwise, show only their grade or directly assigned to them
+                return a.target_grade === studentClass || a.target_student_id === studentId;
+            }).map(a => ({
                 ...a,
                 isCompleted: completedIds.includes(a.id)
             })) || [];

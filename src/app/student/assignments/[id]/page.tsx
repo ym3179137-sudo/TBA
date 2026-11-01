@@ -14,7 +14,7 @@ export default function TakeAssignment() {
     const supabase = createClient();
 
     const [assignment, setAssignment] = useState<any>(null);
-    const [answers, setAnswers] = useState<Record<string, string>>({});
+    const [answers, setAnswers] = useState<Record<string, any>>({});
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [completed, setCompleted] = useState(false);
@@ -45,7 +45,15 @@ export default function TakeAssignment() {
 
     const handleSubmit = async () => {
         setSubmitting(true);
-        const studentId = localStorage.getItem("tba_student_id") || "";
+
+        // Safely get the student ID
+        const getCookie = (name: string) => {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop()?.split(';').shift();
+            return "";
+        };
+        const studentId = getCookie("student_id") || localStorage.getItem("tba_student_id") || "guest-unknown";
 
         try {
             await submitAssignment({
@@ -63,17 +71,27 @@ export default function TakeAssignment() {
         }
     };
 
-    if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
+    // Handle Checkbox selections
+    const toggleCheckbox = (questionId: string, option: string) => {
+        const current = answers[questionId] || [];
+        if (current.includes(option)) {
+            setAnswers({ ...answers, [questionId]: current.filter((o: string) => o !== option) });
+        } else {
+            setAnswers({ ...answers, [questionId]: [...current, option] });
+        }
+    };
+
+    if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin w-8 h-8" /></div>;
     if (!assignment) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">Assignment not found.</div>;
 
     if (completed) {
         return (
             <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6">
                 <div className="bg-slate-900 border-2 border-emerald-500 p-12 rounded-3xl text-center shadow-[0_0_100px_rgba(16,185,129,0.2)]">
-                    <CheckCircle className="w-24 h-24 text-emerald-400 mx-auto mb-6" />
+                    <CheckCircle className="w-24 h-24 text-emerald-400 mx-auto mb-6 animate-bounce" />
                     <h1 className="text-3xl font-black text-white mb-2">Assignment Submitted!</h1>
                     <p className="text-slate-400 mb-8">Your teacher will review your work soon.</p>
-                    <Link href="/student/assignments" className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-8 py-3 rounded-xl transition-all">
+                    <Link href="/student/assignments" className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-8 py-3 rounded-xl transition-all shadow-lg">
                         Back to Assignments
                     </Link>
                 </div>
@@ -107,7 +125,7 @@ export default function TakeAssignment() {
                                     {q.type === "short_text" && (
                                         <input
                                             type="text"
-                                            className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 outline-none focus:border-pink-500"
+                                            className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 outline-none focus:border-pink-500 transition-colors"
                                             placeholder="Your answer..."
                                             value={answers[q.id] || ""}
                                             onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
@@ -116,7 +134,7 @@ export default function TakeAssignment() {
 
                                     {q.type === "long_text" && (
                                         <textarea
-                                            className="w-full h-32 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 outline-none focus:border-pink-500 resize-none"
+                                            className="w-full h-32 bg-slate-900 border border-slate-700 text-white rounded-xl px-4 py-3 outline-none focus:border-pink-500 resize-none transition-colors"
                                             placeholder="Your answer..."
                                             value={answers[q.id] || ""}
                                             onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
@@ -124,16 +142,32 @@ export default function TakeAssignment() {
                                     )}
 
                                     {q.type === "multiple_choice" && (
-                                        <div className="space-y-2">
+                                        <div className="space-y-3">
                                             {q.options?.map((opt: string) => (
-                                                <label key={opt} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${answers[q.id] === opt ? 'border-pink-500 bg-pink-500/10' : 'border-slate-800 hover:border-slate-600'}`}>
+                                                <label key={opt} className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${answers[q.id] === opt ? 'border-pink-500 bg-pink-500/10' : 'border-slate-800 hover:border-slate-600'}`}>
                                                     <input
                                                         type="radio"
                                                         name={q.id}
                                                         value={opt}
                                                         checked={answers[q.id] === opt}
                                                         onChange={() => setAnswers({ ...answers, [q.id]: opt })}
-                                                        className="w-4 h-4 text-pink-500 bg-slate-900 border-slate-700"
+                                                        className="w-5 h-5 text-pink-500 bg-slate-900 border-slate-700 focus:ring-pink-500"
+                                                    />
+                                                    <span className="text-white font-medium">{opt}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {q.type === "checkboxes" && (
+                                        <div className="space-y-3">
+                                            {q.options?.map((opt: string) => (
+                                                <label key={opt} className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${(answers[q.id] || []).includes(opt) ? 'border-pink-500 bg-pink-500/10' : 'border-slate-800 hover:border-slate-600'}`}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={(answers[q.id] || []).includes(opt)}
+                                                        onChange={() => toggleCheckbox(q.id, opt)}
+                                                        className="w-5 h-5 text-pink-500 bg-slate-900 border-slate-700 rounded focus:ring-pink-500"
                                                     />
                                                     <span className="text-white font-medium">{opt}</span>
                                                 </label>
@@ -148,7 +182,7 @@ export default function TakeAssignment() {
                     <button
                         onClick={handleSubmit}
                         disabled={submitting || questions.length === 0}
-                        className="w-full mt-8 bg-pink-600 hover:bg-pink-500 text-white font-black py-4 rounded-xl text-lg flex justify-center gap-2 transition-all disabled:opacity-50"
+                        className="w-full mt-8 bg-pink-600 hover:bg-pink-500 text-white font-black py-4 rounded-xl text-lg flex justify-center gap-2 transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(236,72,153,0.3)]"
                     >
                         {submitting ? <><Loader2 className="animate-spin" /> Submitting...</> : <><Save size={20} /> Submit Assignment</>}
                     </button>
