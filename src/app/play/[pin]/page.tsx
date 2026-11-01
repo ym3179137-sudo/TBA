@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Gamepad2, Loader2, Coins } from "lucide-react";
 import TBAArena from "@/components/TBAArena";
+import { syncGameCoins } from "@/app/actions/game"; // 🚨 Import the sync function
 
 export default function PlayGame() {
     const router = useRouter();
@@ -18,12 +19,12 @@ export default function PlayGame() {
     const [gameMode, setGameMode] = useState("classic");
     const [studentName, setStudentName] = useState("");
     const [studentId, setStudentId] = useState("");
+    const [coinsEarned, setCoinsEarned] = useState(0);
 
-    // Store current answers log in a ref so we can access it when game ends
     const answersLogRef = useRef<any[]>([]);
-    const hasJoinedRef = useRef(false); // 🚨 Prevents double joining
+    const hasJoinedRef = useRef(false);
+    const scoreRef = useRef(0); // 🚨 Track the final score here
 
-    // 🚨 1. JOIN THE LOBBY ONLY ONCE
     useEffect(() => {
         if (!pin || hasJoinedRef.current) return;
 
@@ -37,10 +38,9 @@ export default function PlayGame() {
         let id = getCookie("student_id");
         let name = getCookie("student_name");
 
-        // If no cookie exists, generate ONE and save it immediately
         if (!id) {
             id = `guest-${Math.random().toString(36).slice(2, 8)}`;
-            document.cookie = `student_id=${id}; path=/; max-age=86400`; // Save for 1 day
+            document.cookie = `student_id=${id}; path=/; max-age=86400`;
         }
         if (!name) {
             name = "Guest Player";
@@ -51,7 +51,7 @@ export default function PlayGame() {
 
         setStudentId(id);
         setStudentName(name);
-        hasJoinedRef.current = true; // Lock it so it never runs again
+        hasJoinedRef.current = true;
 
         async function joinLobby() {
             await supabase.from("game_results").upsert({
@@ -61,17 +61,11 @@ export default function PlayGame() {
         joinLobby();
     }, [pin, supabase]);
 
-    // 🚨 2. POLL FOR GAME STATUS (Separate from joining)
     useEffect(() => {
         if (!pin || !studentId) return;
 
         const interval = setInterval(async () => {
-            const { data } = await supabase
-                .from("game_sessions")
-                .select("*")
-                .eq("pin", pin)
-                .maybeSingle(); // 🚨 FIXED 406 ERROR
-
+            const { data } = await supabase.from("game_sessions").select("*").eq("pin", pin).maybeSingle();
             if (data) {
                 if (data.status === "playing" && data.game_data && status === "lobby") {
                     setGameData(data.game_data);
@@ -81,10 +75,17 @@ export default function PlayGame() {
                 if (data.status === "finished" && status === "playing") {
                     setStatus("finished");
                     clearInterval(interval);
-                    // 🚨 Save final log to DB
+
+                    // 🚨 Save final log and coins to DB
                     await supabase.from("game_results").update({
                         answers_log: answersLogRef.current
                     }).eq("game_pin", pin).eq("student_id", studentId);
+
+                    // 🚨 Award Coins!
+                    if (scoreRef.current > 0) {
+                        setCoinsEarned(scoreRef.current);
+                        await syncGameCoins(studentId, scoreRef.current);
+                    }
                 }
             }
         }, 1500);
@@ -93,6 +94,7 @@ export default function PlayGame() {
     }, [pin, supabase, status, studentId]);
 
     const handleScoreUpdate = async (newScore: number) => {
+        scoreRef.current = newScore; // 🚨 Update the score tracker
         await supabase.from("game_results").update({ score: newScore }).eq("game_pin", pin).eq("student_id", studentId);
     };
 
@@ -122,7 +124,19 @@ export default function PlayGame() {
                 <div className="bg-slate-900 border-2 border-amber-500 p-12 rounded-[3rem] shadow-[0_0_100px_rgba(245,158,11,0.2)] text-center max-w-md w-full relative overflow-hidden">
                     <Coins className="w-24 h-24 text-amber-400 mx-auto mb-6 animate-bounce" />
                     <h1 className="text-4xl font-black mb-2">Game Over!</h1>
-                    <p className="text-xl text-slate-400 font-bold mb-8">Great job, {studentName}!</p>
+                    <p className="text-xl text-slate-400 font-bold mb-4">Great job, {studentName}!</p>
+
+                    {/* 🚨 SHOW THE COINS EARNED */}
+                    {coinsEarned > 0 ? (
+                        <div className="bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 font-black text-2xl py-4 rounded-xl mb-8">
+                            +{coinsEarned} Coins Added! 🪙
+                        </div>
+                    ) : (
+                        <div className="text-slate-500 mb-8 font-bold">
+                            {studentId.startsWith("guest-") ? "Log in to save your coins!" : "No coins earned this round."}
+                        </div>
+                    )}
+
                     <button onClick={() => router.push("/student")} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl transition-all">Back to Dashboard</button>
                 </div>
             </div>
