@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { submitAssignment } from "@/app/actions/submissions";
-import { ArrowLeft, CheckCircle, Loader2, Save, LogOut, AlertTriangle } from "lucide-react";
+import { CheckCircle, Loader2, Save, LogOut, AlertTriangle } from "lucide-react";
 import Link from "next/link";
+import BackButton from "@/components/BackButton"; // 🚨 Import the smart back button
 
 export default function TakeAssignment() {
     const params = useParams();
@@ -128,9 +129,9 @@ export default function TakeAssignment() {
 
             <div className="w-full max-w-3xl">
                 <div className="flex justify-between items-center mb-6">
-                    <Link href="/student/assignments" className="inline-flex items-center gap-2 text-slate-400 hover:text-white font-bold">
-                        <ArrowLeft size={20} /> Back
-                    </Link>
+                    {/* 🚨 SMART BACK BUTTON */}
+                    <BackButton fallbackUrl="/student/assignments" label="Back" />
+
                     <button onClick={() => {
                         if (confirm("Are you sure you want to quit? Your progress will be lost.")) router.push("/student/assignments");
                     }} className="text-red-400 hover:text-white bg-red-500/10 hover:bg-red-500 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all">

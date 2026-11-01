@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { ArrowLeft, ClipboardList, CheckCircle, AlertTriangle, Loader2, MessageSquare } from "lucide-react";
+import { ClipboardList, CheckCircle, AlertTriangle, Loader2, MessageSquare } from "lucide-react";
+import BackButton from "@/components/BackButton"; // 🚨 Import the smart back button
 
 export default function StudentGrades() {
     const [grades, setGrades] = useState<any[]>([]);
@@ -22,21 +22,35 @@ export default function StudentGrades() {
 
             if (!studentId) return;
 
-            // Fetch submissions with assignment titles
-            const { data, error } = await supabase
+            // 🚨 FIXED: Fetch submissions WITHOUT relational joins to prevent 400 errors
+            const { data: subs, error } = await supabase
                 .from("submissions")
-                .select(`
-                    id,
-                    score,
-                    integrity_score,
-                    teacher_feedback,
-                    submitted_at,
-                    assignments (title, subject)
-                `)
+                .select("*")
                 .eq("student_id", studentId)
                 .order("submitted_at", { ascending: false });
 
-            if (data) setGrades(data);
+            if (error) {
+                console.error("Error fetching grades:", error);
+                setLoading(false);
+                return;
+            }
+
+            if (subs && subs.length > 0) {
+                // Fetch the assignment titles separately
+                const assignmentIds = [...new Set(subs.map(s => s.assignment_id))];
+                const { data: assigns } = await supabase
+                    .from("assignments")
+                    .select("id, title")
+                    .in("id", assignmentIds);
+
+                // Merge them together safely
+                const mergedGrades = subs.map(sub => ({
+                    ...sub,
+                    assignment_title: assigns?.find(a => a.id === sub.assignment_id)?.title || "Unknown Assignment"
+                }));
+
+                setGrades(mergedGrades);
+            }
             setLoading(false);
         }
         fetchGrades();
@@ -47,9 +61,9 @@ export default function StudentGrades() {
     return (
         <div className="min-h-screen bg-slate-950 p-8 flex flex-col items-center font-sans">
             <div className="w-full max-w-4xl">
-                <Link href="/student" className="flex items-center gap-2 text-slate-400 hover:text-white mb-8 font-bold transition-colors">
-                    <ArrowLeft size={20} /> Back to Dashboard
-                </Link>
+                <div className="mb-8">
+                    <BackButton fallbackUrl="/student" label="Back" />
+                </div>
 
                 <div className="flex items-center gap-4 mb-8">
                     <div className="p-4 bg-amber-500/20 rounded-2xl text-amber-400">
@@ -70,12 +84,12 @@ export default function StudentGrades() {
                 ) : (
                     <div className="space-y-4">
                         {grades.map((grade) => {
-                            const isPassing = grade.score >= 70;
+                            const isPassing = (grade.score || 0) >= 70;
                             return (
                                 <div key={grade.id} className="bg-slate-900 border border-slate-700 p-6 rounded-2xl shadow-xl">
                                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 pb-4 border-b border-slate-800 gap-4">
                                         <div>
-                                            <h3 className="text-xl font-bold text-white">{grade.assignments?.title || "Unknown Assignment"}</h3>
+                                            <h3 className="text-xl font-bold text-white">{grade.assignment_title}</h3>
                                             <p className="text-sm text-slate-400">{new Date(grade.submitted_at).toLocaleDateString()}</p>
                                         </div>
 

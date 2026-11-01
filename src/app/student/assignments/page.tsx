@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { ArrowLeft, FileText, CheckCircle, Clock, Lock, Loader2 } from "lucide-react";
+import { FileText, CheckCircle, Clock, Lock, Loader2 } from "lucide-react";
+import Link from "next/link";
+import BackButton from "@/components/BackButton"; // 🚨 Import the smart back button
 
 export default function StudentAssignments() {
     const [assignments, setAssignments] = useState<any[]>([]);
@@ -32,7 +33,7 @@ export default function StudentAssignments() {
             const { data: child } = await supabase.from("children").select("class_name").eq("id", studentId).maybeSingle();
             if (child?.class_name) studentClass = child.class_name;
 
-            const { data: allAssignments } = await supabase.from("assignments").select("*").order("created_at", { ascending: false });
+            const { data: allAssignments } = await supabase.from("assignments").select("*").eq("status", "published").order("created_at", { ascending: false });
 
             let completedIds: string[] = [];
             if (studentId.length > 20) {
@@ -53,14 +54,16 @@ export default function StudentAssignments() {
         fetchAssignments();
     }, [supabase, router]);
 
-    if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
+    if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin w-10 h-10" /></div>;
 
     return (
-        <div className="min-h-screen bg-slate-950 p-8 flex flex-col items-center">
+        <div className="min-h-screen bg-slate-950 p-8 flex flex-col items-center font-sans">
             <div className="w-full max-w-4xl">
-                <Link href="/student" className="flex items-center gap-2 text-slate-400 hover:text-white mb-8 font-bold">
-                    <ArrowLeft size={20} /> Back to Dashboard
-                </Link>
+                {/* 🚨 SMART BACK BUTTON */}
+                <div className="mb-8">
+                    <BackButton fallbackUrl="/student" label="Back" />
+                </div>
+
                 <h1 className="text-4xl font-extrabold text-white mb-8">My Assignments</h1>
 
                 {assignments.length === 0 ? (
@@ -72,22 +75,22 @@ export default function StudentAssignments() {
                 ) : (
                     <div className="grid gap-4">
                         {assignments.map((assignment) => (
-                            <div key={assignment.id} className="bg-slate-900 border border-slate-700 p-6 rounded-2xl flex justify-between items-center">
+                            <div key={assignment.id} className="bg-slate-900 border border-slate-700 p-6 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                 <div>
                                     <h3 className="text-xl font-bold text-white">{assignment.title}</h3>
-                                    <p className="text-sm text-slate-400">{assignment.description || "No description"}</p>
-                                    <div className="flex gap-4 mt-3 text-xs font-bold text-slate-500">
+                                    <p className="text-sm text-slate-400">{assignment.description || "No description provided."}</p>
+                                    <div className="flex flex-wrap gap-4 mt-3 text-xs font-bold text-slate-500">
                                         <span className="flex items-center gap-1"><Clock size={14} /> {new Date(assignment.created_at).toLocaleDateString()}</span>
-                                        {assignment.settings?.lockMode && <span className="flex items-center gap-1 text-red-400"><Lock size={14} /> Lock Mode</span>}
+                                        {assignment.settings?.lockMode && <span className="flex items-center gap-1 text-red-400 bg-red-400/10 px-2 py-1 rounded"><Lock size={14} /> Lock Mode</span>}
                                     </div>
                                 </div>
                                 <div>
                                     {assignment.isCompleted ? (
-                                        <div className="flex items-center gap-2 text-emerald-400 font-bold bg-emerald-500/10 px-6 py-3 rounded-xl">
+                                        <div className="flex items-center gap-2 text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-6 py-3 rounded-xl">
                                             <CheckCircle size={20} /> Completed
                                         </div>
                                     ) : (
-                                        <Link href={`/student/assignments/${assignment.id}`} className="bg-pink-600 hover:bg-pink-500 text-white font-bold px-8 py-3 rounded-xl transition-all shadow-lg">
+                                        <Link href={`/student/assignments/${assignment.id}`} className="bg-pink-600 hover:bg-pink-500 text-white font-bold px-8 py-3 rounded-xl transition-all shadow-lg flex items-center justify-center min-w-[120px]">
                                             Start
                                         </Link>
                                     )}
