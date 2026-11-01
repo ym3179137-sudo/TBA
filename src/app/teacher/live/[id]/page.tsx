@@ -19,6 +19,7 @@ export default function TeacherLivePresenter() {
 
     const [tool, setTool] = useState<'none' | 'laser' | 'pen' | 'text'>('pen');
     const [color, setColor] = useState("#ef4444");
+    const [isDrawing, setIsDrawing] = useState(false);
     const [attendance, setAttendance] = useState<any[]>([]);
     const [textInput, setTextInput] = useState<{ active: boolean, x: number, y: number, value: string } | null>(null);
 
@@ -27,10 +28,9 @@ export default function TeacherLivePresenter() {
     const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
-    const isDrawingRef = useRef<boolean>(false);
     const prevPointRef = useRef<{ x: number, y: number } | null>(null);
-    const lastEmitRef = useRef<number>(0);
 
+    // Keyboard Navigation
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'ArrowRight') {
@@ -43,27 +43,33 @@ export default function TeacherLivePresenter() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [currentSlide, presentation]);
 
+    // Canvas Resizing (Simple & Delayed)
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
                 const { clientWidth, clientHeight } = containerRef.current;
-                if (canvasRef.current && canvasRef.current.width !== clientWidth) {
+                if (canvasRef.current) {
                     canvasRef.current.width = clientWidth;
                     canvasRef.current.height = clientHeight;
                 }
-                if (laserCanvasRef.current && laserCanvasRef.current.width !== clientWidth) {
+                if (laserCanvasRef.current) {
                     laserCanvasRef.current.width = clientWidth;
                     laserCanvasRef.current.height = clientHeight;
                 }
             }
         };
-        updateSize();
-        const timeoutId = setTimeout(updateSize, 200);
-        const observer = new ResizeObserver(updateSize);
-        if (containerRef.current) observer.observe(containerRef.current);
-        return () => { clearTimeout(timeoutId); observer.disconnect(); };
+
+        // Wait for the page to fully render before calculating size
+        const timeoutId = setTimeout(updateSize, 500);
+        window.addEventListener('resize', updateSize);
+
+        return () => {
+            clearTimeout(timeoutId);
+            window.removeEventListener('resize', updateSize);
+        };
     }, [presentation]);
 
+    // Laser fade
     useEffect(() => {
         let animationFrameId: number;
         const fade = () => {
@@ -72,7 +78,7 @@ export default function TeacherLivePresenter() {
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
                     ctx.globalCompositeOperation = 'destination-out';
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                     ctx.globalCompositeOperation = 'source-over';
                 }
@@ -134,13 +140,9 @@ export default function TeacherLivePresenter() {
 
         if (tool === 'laser') {
             drawLaser(e.clientX - rect.left, e.clientY - rect.top);
-            const now = Date.now();
-            if (now - lastEmitRef.current > 30) {
-                channelRef.current?.send({ type: 'broadcast', event: 'laser', payload: { x, y, color } });
-                lastEmitRef.current = now;
-            }
+            channelRef.current?.send({ type: 'broadcast', event: 'laser', payload: { x, y, color } });
         }
-        if (tool === 'pen' && isDrawingRef.current) {
+        if (tool === 'pen' && isDrawing) {
             drawPen(e);
         }
     };
@@ -169,17 +171,18 @@ export default function TeacherLivePresenter() {
         const normY = (e.clientY - rect.top) / rect.height;
 
         if (tool === 'pen') {
-            isDrawingRef.current = true;
+            setIsDrawing(true);
             const ctx = canvasRef.current.getContext('2d');
             if (ctx) {
                 ctx.beginPath();
                 ctx.arc(e.clientX - rect.left, e.clientY - rect.top, 2, 0, Math.PI * 2);
                 ctx.fillStyle = color;
                 ctx.fill();
-                // 🚨 FIXED: Start the path so lines draw instantly
+                // Start path
                 ctx.beginPath();
                 ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
             }
+
             prevPointRef.current = { x: normX, y: normY };
             channelRef.current?.send({ type: 'broadcast', event: 'dot', payload: { x: normX, y: normY, color } });
         }
@@ -206,7 +209,7 @@ export default function TeacherLivePresenter() {
     };
 
     const drawPen = (e: React.MouseEvent) => {
-        if (!isDrawingRef.current || !canvasRef.current || !prevPointRef.current) return;
+        if (!isDrawing || !canvasRef.current || !prevPointRef.current) return;
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
@@ -224,21 +227,17 @@ export default function TeacherLivePresenter() {
         ctx.lineJoin = "round";
         ctx.stroke();
 
-        const now = Date.now();
-        if (now - lastEmitRef.current > 15) {
-            channelRef.current?.send({
-                type: 'broadcast',
-                event: 'draw',
-                payload: { x: normX, y: normY, prevX: prevPointRef.current.x, prevY: prevPointRef.current.y, color }
-            });
-            lastEmitRef.current = now;
-        }
+        channelRef.current?.send({
+            type: 'broadcast',
+            event: 'draw',
+            payload: { x: normX, y: normY, prevX: prevPointRef.current.x, prevY: prevPointRef.current.y, color }
+        });
 
         prevPointRef.current = { x: normX, y: normY };
     };
 
     const stopDraw = () => {
-        isDrawingRef.current = false;
+        setIsDrawing(false);
         prevPointRef.current = null;
     };
 
@@ -310,7 +309,7 @@ export default function TeacherLivePresenter() {
                 <canvas ref={laserCanvasRef} className={`absolute inset-0 z-50 ${tool === 'laser' ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'}`} />
 
                 {textInput?.active && (
-                    <div className="absolute z-[9999] flex items-center gap-2 bg-black/90 p-2 rounded-xl border border-white/20 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in duration-200" style={{ top: textInput.y - 30, left: textInput.x }}>
+                    <div className="absolute z-[9999] flex items-center gap-2 bg-black/90 p-2 rounded-xl border border-white/20 shadow-2xl backdrop-blur-md" style={{ top: textInput.y - 30, left: textInput.x }}>
                         <input
                             autoFocus type="text" value={textInput.value}
                             onChange={(e) => setTextInput({ ...textInput, value: e.target.value })}

@@ -7,7 +7,6 @@ export default function DeckViewer({ deck, externalSlide }: any) {
     const [currentSlide, setCurrentSlide] = useState(externalSlide || 0);
     const [imgLoading, setImgLoading] = useState(true);
     const [imgError, setImgError] = useState(false);
-    const [imageUrl, setImageUrl] = useState<string | null>(null);
 
     useEffect(() => {
         if (externalSlide !== undefined && externalSlide !== currentSlide) {
@@ -15,55 +14,20 @@ export default function DeckViewer({ deck, externalSlide }: any) {
         }
     }, [externalSlide]);
 
-    const slide = deck?.slides?.[currentSlide];
-
     useEffect(() => {
-        if (!slide) return;
         setImgLoading(true);
         setImgError(false);
+    }, [currentSlide]);
 
-        if (slide.savedImage) {
-            setImageUrl(slide.savedImage);
-            setImgLoading(false);
-            return;
-        }
-
-        const cleanPrompt = (slide.imagePrompt || slide.heading || "cute cartoon education")
-            .replace(/[^a-zA-Z0-9 ]/g, "")
-            .substring(0, 100);
-        const cacheKey = `tba_img_${currentSlide}_${cleanPrompt.replace(/\s/g, '_')}`;
-
-        const cachedImg = localStorage.getItem(cacheKey);
-        if (cachedImg) {
-            setImageUrl(cachedImg);
-            setImgLoading(false);
-            return;
-        }
-
-        const fetchUrl = `/api/generate-image?prompt=${encodeURIComponent(cleanPrompt)}&seed=${currentSlide}`;
-        fetch(fetchUrl)
-            .then(res => res.blob())
-            .then(blob => {
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                    const base64data = reader.result as string;
-                    localStorage.setItem(cacheKey, base64data);
-                    setImageUrl(base64data);
-                    setImgLoading(false);
-                };
-                reader.readAsDataURL(blob);
-            })
-            .catch(() => {
-                setImgError(true);
-                setImgLoading(false);
-            });
-    }, [currentSlide, slide]);
-
+    const slide = deck?.slides?.[currentSlide];
     if (!slide) return null;
+
     const layout = slide.layout || "right-image";
+    const cleanPrompt = (slide.imagePrompt || slide.heading || "cute cartoon education").replace(/[^a-zA-Z0-9 ]/g, "").substring(0, 100);
+    const imageUrl = slide.savedImage || `/api/generate-image?prompt=${encodeURIComponent(cleanPrompt)}&seed=${currentSlide}`;
 
     return (
-        // 🚨 ADDED pointer-events-none SO THIS NEVER BLOCKS THE PEN
+        // 🚨 pointer-events-none ensures this never blocks the drawing canvas
         <div className="relative w-full h-full flex flex-col bg-slate-950 pointer-events-none select-none">
             <div className={`flex-1 flex flex-col md:flex-row items-center justify-center p-8 md:p-16 gap-12 transition-all duration-500 overflow-y-auto
                 ${layout === 'right-image' ? 'md:flex-row' : layout === 'left-image' ? 'md:flex-row-reverse' : 'flex-col text-center'}`}
@@ -102,14 +66,14 @@ export default function DeckViewer({ deck, externalSlide }: any) {
                                 <p className="text-slate-400 text-sm max-w-xs">The AI image failed to load.</p>
                             </div>
                         ) : (
-                            imageUrl && (
-                                <img
-                                    key={currentSlide}
-                                    src={imageUrl}
-                                    alt={slide.heading}
-                                    className={`w-full h-full object-cover transition-all duration-700 ${imgLoading ? 'opacity-0 scale-105' : 'opacity-100 scale-100'}`}
-                                />
-                            )
+                            <img
+                                key={currentSlide}
+                                src={imageUrl}
+                                alt={slide.heading}
+                                onLoad={() => setImgLoading(false)}
+                                onError={() => { setImgLoading(false); setImgError(true); }}
+                                className={`w-full h-full object-cover transition-all duration-700 ${imgLoading ? 'opacity-0 scale-105' : 'opacity-100 scale-100'}`}
+                            />
                         )}
                     </div>
                 </div>

@@ -21,21 +21,22 @@ export default function StudentClassroom() {
         const updateSize = () => {
             if (containerRef.current) {
                 const { clientWidth, clientHeight } = containerRef.current;
-                if (canvasRef.current && canvasRef.current.width !== clientWidth) {
+                if (canvasRef.current) {
                     canvasRef.current.width = clientWidth;
                     canvasRef.current.height = clientHeight;
                 }
-                if (laserCanvasRef.current && laserCanvasRef.current.width !== clientWidth) {
+                if (laserCanvasRef.current) {
                     laserCanvasRef.current.width = clientWidth;
                     laserCanvasRef.current.height = clientHeight;
                 }
             }
         };
-        updateSize();
-        const timeoutId = setTimeout(updateSize, 200);
-        const observer = new ResizeObserver(updateSize);
-        if (containerRef.current) observer.observe(containerRef.current);
-        return () => { clearTimeout(timeoutId); observer.disconnect(); };
+        const timeoutId = setTimeout(updateSize, 500);
+        window.addEventListener('resize', updateSize);
+        return () => {
+            clearTimeout(timeoutId);
+            window.removeEventListener('resize', updateSize);
+        };
     }, [liveData]);
 
     const laserPoints = useRef<{ x: number; y: number; life: number; color: string }[]>([]);
