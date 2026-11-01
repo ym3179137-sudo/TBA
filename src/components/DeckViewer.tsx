@@ -28,7 +28,6 @@ export default function DeckViewer({ deck, externalSlide }: any) {
         .replace(/[^a-zA-Z0-9 ]/g, "")
         .substring(0, 100);
 
-    // 🚨 USE SAVED IMAGE IF IT EXISTS
     const imageUrl = slide.savedImage || `/api/generate-image?prompt=${encodeURIComponent(cleanPrompt)}&seed=${currentSlide}`;
 
     return (
@@ -52,8 +51,7 @@ export default function DeckViewer({ deck, externalSlide }: any) {
                             </li>
                         ))}
                     </ul>
-
-
+                    {/* 🚨 The Teacher Prompt block has been completely removed */}
                 </div>
 
                 <div className={`flex-1 w-full max-w-lg relative ${layout === 'centered' ? 'mt-8' : ''}`}>

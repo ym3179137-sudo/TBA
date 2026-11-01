@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import DeckViewer from "@/components/DeckViewer";
-import { StopCircle, Loader2, MousePointer2, PenTool, Highlighter, Trash2, Type, Users, ChevronLeft, ChevronRight } from "lucide-react";
+import { StopCircle, Loader2, MousePointer2, PenTool, Trash2, Type, Users, ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function TeacherLivePresenter() {
     const router = useRouter();
@@ -17,12 +17,12 @@ export default function TeacherLivePresenter() {
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
-    const [tool, setTool] = useState<'none' | 'laser' | 'pen' | 'highlighter' | 'text'>('pen');
+    // 🚨 HIGHLIGHTER REMOVED FROM STATE
+    const [tool, setTool] = useState<'none' | 'laser' | 'pen' | 'text'>('pen');
     const [color, setColor] = useState("#ef4444");
     const [isDrawing, setIsDrawing] = useState(false);
     const [attendance, setAttendance] = useState<any[]>([]);
 
-    // 🚨 Custom Text Input State
     const [textInput, setTextInput] = useState<{ active: boolean, x: number, y: number, value: string } | null>(null);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -32,7 +32,6 @@ export default function TeacherLivePresenter() {
 
     const prevPointRef = useRef<{ x: number, y: number } | null>(null);
 
-    // Keyboard Navigation
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'ArrowRight') {
@@ -45,7 +44,6 @@ export default function TeacherLivePresenter() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [currentSlide, presentation]);
 
-    // Canvas sizing
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
@@ -65,7 +63,6 @@ export default function TeacherLivePresenter() {
         return () => window.removeEventListener('resize', updateSize);
     }, [presentation]);
 
-    // Laser fade effect
     useEffect(() => {
         let animationFrameId: number;
         const fade = () => {
@@ -146,7 +143,7 @@ export default function TeacherLivePresenter() {
             drawLaser(e.clientX - rect.left, e.clientY - rect.top);
             channelRef.current?.send({ type: 'broadcast', event: 'laser', payload: { x, y, color } });
         }
-        if ((tool === 'pen' || tool === 'highlighter') && isDrawing) {
+        if (tool === 'pen' && isDrawing) {
             drawPen(e);
         }
     };
@@ -175,21 +172,18 @@ export default function TeacherLivePresenter() {
         const normX = (e.clientX - rect.left) / rect.width;
         const normY = (e.clientY - rect.top) / rect.height;
 
-        if (tool === 'pen' || tool === 'highlighter') {
+        if (tool === 'pen') {
             setIsDrawing(true);
             const ctx = canvasRef.current.getContext('2d');
             if (ctx) {
-                // 🚨 THINNER HIGHLIGHTER DOT
                 ctx.beginPath();
-                ctx.arc(e.clientX - rect.left, e.clientY - rect.top, tool === 'highlighter' ? 3 : 2, 0, Math.PI * 2);
+                ctx.arc(e.clientX - rect.left, e.clientY - rect.top, 2, 0, Math.PI * 2);
                 ctx.fillStyle = color;
-                ctx.globalAlpha = tool === 'highlighter' ? 0.2 : 1.0;
                 ctx.fill();
-                ctx.globalAlpha = 1.0;
             }
 
             prevPointRef.current = { x: normX, y: normY };
-            channelRef.current?.send({ type: 'broadcast', event: 'dot', payload: { x: normX, y: normY, color, tool } });
+            channelRef.current?.send({ type: 'broadcast', event: 'dot', payload: { x: normX, y: normY, color } });
         }
 
         if (tool === 'text') {
@@ -233,19 +227,18 @@ export default function TeacherLivePresenter() {
 
         ctx.lineTo(x, y);
         ctx.strokeStyle = color;
-        // 🚨 THINNER HIGHLIGHTER LINE
-        ctx.lineWidth = tool === 'highlighter' ? 8 : 8;
-        ctx.globalAlpha = tool === 'highlighter' ? 0.001 : 0.95;
+        // 🚨 FIXED: Always solid (1.0) and thickness 4
+        ctx.lineWidth = 4;
+        ctx.globalAlpha = 1.0;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.stroke();
-        ctx.globalAlpha = 1.0;
 
         if (channelRef.current) {
             channelRef.current.send({
                 type: 'broadcast',
                 event: 'draw',
-                payload: { x: normX, y: normY, prevX: prevPointRef.current.x, prevY: prevPointRef.current.y, color, tool }
+                payload: { x: normX, y: normY, prevX: prevPointRef.current.x, prevY: prevPointRef.current.y, color }
             });
         }
 
@@ -302,7 +295,7 @@ export default function TeacherLivePresenter() {
                     <button onClick={() => setTool('none')} className={`p-2 rounded-lg ${tool === 'none' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><MousePointer2 size={20} /></button>
                     <button onClick={() => setTool('laser')} className={`p-2 rounded-lg ${tool === 'laser' ? 'bg-red-500 text-white' : 'hover:bg-white/20'}`}><div className="w-5 h-5 rounded-full animate-pulse" style={{ backgroundColor: color }} /></button>
                     <button onClick={() => setTool('pen')} className={`p-2 rounded-lg ${tool === 'pen' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><PenTool size={20} /></button>
-                    <button onClick={() => setTool('highlighter')} className={`p-2 rounded-lg ${tool === 'highlighter' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><Highlighter size={20} /></button>
+                    {/* 🚨 HIGHLIGHTER BUTTON REMOVED */}
                     <button onClick={() => setTool('text')} className={`p-2 rounded-lg ${tool === 'text' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><Type size={20} /></button>
 
                     <div className="flex gap-1 ml-2 pl-2 border-l border-white/20">
@@ -330,7 +323,7 @@ export default function TeacherLivePresenter() {
 
                 <canvas
                     ref={canvasRef}
-                    className={`absolute inset-0 z-40 ${tool === 'pen' || tool === 'highlighter' || tool === 'text' ? 'cursor-crosshair' : 'pointer-events-none'}`}
+                    className={`absolute inset-0 z-40 ${tool === 'pen' || tool === 'text' ? 'cursor-crosshair' : 'pointer-events-none'}`}
                 />
                 <canvas
                     ref={laserCanvasRef}

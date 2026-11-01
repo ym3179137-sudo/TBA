@@ -120,31 +120,28 @@ export default function StudentClassroom() {
             .on('broadcast', { event: 'draw' }, (payload: any) => {
                 const ctx = canvasRef.current?.getContext('2d');
                 if (ctx && canvasRef.current) {
-                    const { x, y, prevX, prevY, color, tool } = payload.payload;
+                    const { x, y, prevX, prevY, color } = payload.payload;
                     ctx.beginPath();
                     ctx.moveTo(prevX * canvasRef.current.width, prevY * canvasRef.current.height);
                     ctx.lineTo(x * canvasRef.current.width, y * canvasRef.current.height);
                     ctx.strokeStyle = color || "#ef4444";
-                    // 🚨 THINNER HIGHLIGHTER LINE
-                    ctx.lineWidth = tool === 'highlighter' ? 8 : 8;
-                    ctx.globalAlpha = tool === 'highlighter' ? 0.001 : 0.95;
+                    // 🚨 FIXED: Just a standard solid pen
+                    ctx.lineWidth = 4;
+                    ctx.globalAlpha = 1.0;
                     ctx.lineCap = "round";
                     ctx.lineJoin = "round";
                     ctx.stroke();
-                    ctx.globalAlpha = 1.0;
                 }
             })
             .on('broadcast', { event: 'dot' }, (payload: any) => {
                 const ctx = canvasRef.current?.getContext('2d');
                 if (ctx && canvasRef.current) {
-                    const { x, y, color, tool } = payload.payload;
+                    const { x, y, color } = payload.payload;
                     ctx.beginPath();
-                    // 🚨 THINNER HIGHLIGHTER DOT
-                    ctx.arc(x * canvasRef.current.width, y * canvasRef.current.height, tool === 'highlighter' ? 3 : 2, 0, Math.PI * 2);
+                    // 🚨 FIXED: Standard solid dot
+                    ctx.arc(x * canvasRef.current.width, y * canvasRef.current.height, 2, 0, Math.PI * 2);
                     ctx.fillStyle = color || "#ef4444";
-                    ctx.globalAlpha = tool === 'highlighter' ? 0.2 : 1.0;
                     ctx.fill();
-                    ctx.globalAlpha = 1.0;
                 }
             })
             .on('broadcast', { event: 'text' }, (payload: any) => {
