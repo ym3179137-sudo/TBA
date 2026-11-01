@@ -4,10 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import pptxgen from "pptxgenjs";
+import JSZip from "jszip"; // 🚨 IMPORT ADDED
 import {
     Sparkles, Presentation, MonitorPlay, LogOut,
     FileText, Loader2, ArrowLeft, Download, Edit3,
-    CheckCircle, Link as LinkIcon, Send, Users, X, Gamepad2
+    CheckCircle, Link as LinkIcon, Send, Users, X, Gamepad2, UploadCloud
 } from "lucide-react";
 import DeckViewer from "@/components/DeckViewer";
 import { createClient } from "@/lib/supabase/client";
@@ -22,6 +23,7 @@ export default function TeacherHub() {
     const [style, setStyle] = useState("3D Pixar");
 
     const [loading, setLoading] = useState(false);
+    const [parsingPptx, setParsingPptx] = useState(false); // 🚨 NEW STATE
     const [deckData, setDeckData] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
 
@@ -35,9 +37,53 @@ export default function TeacherHub() {
     const [studentsList, setStudentsList] = useState<{ id: string, full_name: string }[]>([]);
     const [isPublishing, setIsPublishing] = useState(false);
 
+    // 🚨 NEW FUNCTION: Extracts text from PPTX
+    const handlePptxUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setParsingPptx(true);
+        setError(null);
+
+        try {
+            const zip = await JSZip.loadAsync(file);
+            const slideFiles = Object.keys(zip.files).filter(
+                (name) => name.startsWith("ppt/slides/slide") && name.endsWith(".xml")
+            );
+
+            let extractedText = "";
+
+            // Sort slides numerically so they stay in order
+            slideFiles.sort((a, b) => {
+                const numA = parseInt(a.match(/\d+/)?.[0] || "0");
+                const numB = parseInt(b.match(/\d+/)?.[0] || "0");
+                return numA - numB;
+            });
+
+            for (const slideFile of slideFiles) {
+                const content = await zip.file(slideFile)?.async("string");
+                if (content) {
+                    // Extract all text inside <a:t> tags
+                    const matches = content.match(/<a:t>(.*?)<\/a:t>/g);
+                    if (matches) {
+                        const slideText = matches.map((m) => m.replace(/<\/?a:t>/g, "")).join(" ");
+                        extractedText += slideText + "\n\n";
+                    }
+                }
+            }
+
+            setLessonText(extractedText.trim());
+        } catch (err) {
+            console.error(err);
+            setError("Failed to read the PowerPoint file. Make sure it's a valid .pptx file.");
+        } finally {
+            setParsingPptx(false);
+        }
+    };
+
     async function handleGenerate(e: React.FormEvent) {
         e.preventDefault();
-        if (!lessonText) return setError("Please enter some lesson content.");
+        if (!lessonText) return setError("Please enter some lesson content or upload a PPTX.");
         setLoading(true);
         setError(null);
         setDeckData(null);
@@ -187,6 +233,34 @@ export default function TeacherHub() {
                                         <option value="Montessori">Montessori</option>
                                     </select>
                                 </div>
+
+                                {/* 🚨 NEW: PPTX UPLOADER */}
+                                <div className="bg-slate-950 border border-slate-700 border-dashed rounded-xl p-4 text-center relative hover:bg-slate-900 transition-colors">
+                                    <input
+                                        type="file"
+                                        accept=".pptx"
+                                        onChange={handlePptxUpload}
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                    />
+                                    {parsingPptx ? (
+                                        <div className="flex items-center justify-center gap-2 text-emerald-400 font-bold">
+                                            <Loader2 className="animate-spin w-5 h-5" /> Extracting text from PowerPoint...
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col items-center gap-2 text-slate-400">
+                                            <UploadCloud className="w-8 h-8 text-emerald-500 mb-1" />
+                                            <span className="text-sm font-bold">Upload a PowerPoint (.pptx)</span>
+                                            <span className="text-xs">We will extract the text and rebuild it with AI</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                    <div className="h-px bg-slate-800 flex-1"></div>
+                                    <span className="text-xs text-slate-500 font-bold uppercase">Or type manually</span>
+                                    <div className="h-px bg-slate-800 flex-1"></div>
+                                </div>
+
                                 <textarea placeholder="Paste your lesson notes here..." value={lessonText} onChange={e => setLessonText(e.target.value)} required className="w-full h-48 bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 resize-none text-sm" />
                                 <button type="submit" disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-4 rounded-xl shadow-lg flex justify-center gap-2 disabled:opacity-50">
                                     {loading ? <><Loader2 className="animate-spin w-5 h-5" /> Generating...</> : <><Sparkles className="w-5 h-5" /> Generate Presentation</>}
@@ -211,7 +285,7 @@ export default function TeacherHub() {
                 </div>
             </main>
 
-            {/* PUBLISH MODAL (Same as before) */}
+            {/* PUBLISH MODAL */}
             {isPublishModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
                     <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6">
