@@ -14,19 +14,22 @@ export default function StudentClassroom() {
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const laserCanvasRef = useRef<HTMLCanvasElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
+    // 🚨 FIXED: Canvas size exactly matches the container, not the window
     useEffect(() => {
         const updateSize = () => {
-            const w = window.innerWidth;
-            const h = window.innerHeight;
-            if (canvasRef.current) {
-                canvasRef.current.width = w;
-                canvasRef.current.height = h;
-            }
-            if (laserCanvasRef.current) {
-                laserCanvasRef.current.width = w;
-                laserCanvasRef.current.height = h;
+            if (containerRef.current) {
+                const { clientWidth, clientHeight } = containerRef.current;
+                if (canvasRef.current) {
+                    canvasRef.current.width = clientWidth;
+                    canvasRef.current.height = clientHeight;
+                }
+                if (laserCanvasRef.current) {
+                    laserCanvasRef.current.width = clientWidth;
+                    laserCanvasRef.current.height = clientHeight;
+                }
             }
         };
         updateSize();
@@ -47,7 +50,7 @@ export default function StudentClassroom() {
                         p.life -= 0.03;
                         if (p.life > 0) {
                             ctx.beginPath();
-                            ctx.arc(p.x * canvas.width, p.y * canvas.height, 6, 0, Math.PI * 2);
+                            ctx.arc(p.x * canvas.width, p.y * canvas.height, 8, 0, Math.PI * 2);
                             ctx.fillStyle = p.color;
                             ctx.globalAlpha = p.life;
                             ctx.shadowBlur = 15;
@@ -174,7 +177,7 @@ export default function StudentClassroom() {
                     LIVE: {liveData.presentation.title}
                 </div>
 
-                <div className="flex-1 overflow-hidden relative">
+                <div className="flex-1 overflow-hidden relative" ref={containerRef}>
                     <DeckViewer
                         deck={liveData.presentation.deck_data}
                         externalSlide={currentSlide}

@@ -18,17 +18,21 @@ export default function TeacherLivePresenter() {
     const [loading, setLoading] = useState(true);
 
     const [tool, setTool] = useState<'none' | 'laser' | 'pen' | 'highlighter' | 'text'>('pen');
-    const [color, setColor] = useState("#ef4444"); // Default Red
+    const [color, setColor] = useState("#ef4444");
     const [isDrawing, setIsDrawing] = useState(false);
     const [attendance, setAttendance] = useState<any[]>([]);
 
+    // 🚨 Custom Text Input State
+    const [textInput, setTextInput] = useState<{ active: boolean, x: number, y: number, value: string } | null>(null);
+
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const laserCanvasRef = useRef<HTMLCanvasElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
     const prevPointRef = useRef<{ x: number, y: number } | null>(null);
 
-    // 🚨 NEW: Keyboard Navigation
+    // Keyboard Navigation
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'ArrowRight') {
@@ -41,17 +45,19 @@ export default function TeacherLivePresenter() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [currentSlide, presentation]);
 
+    // 🚨 FIXED: Canvas size exactly matches the container, not the window
     useEffect(() => {
         const updateSize = () => {
-            const w = window.innerWidth;
-            const h = window.innerHeight;
-            if (canvasRef.current) {
-                canvasRef.current.width = w;
-                canvasRef.current.height = h;
-            }
-            if (laserCanvasRef.current) {
-                laserCanvasRef.current.width = w;
-                laserCanvasRef.current.height = h;
+            if (containerRef.current) {
+                const { clientWidth, clientHeight } = containerRef.current;
+                if (canvasRef.current) {
+                    canvasRef.current.width = clientWidth;
+                    canvasRef.current.height = clientHeight;
+                }
+                if (laserCanvasRef.current) {
+                    laserCanvasRef.current.width = clientWidth;
+                    laserCanvasRef.current.height = clientHeight;
+                }
             }
         };
         updateSize();
@@ -127,15 +133,18 @@ export default function TeacherLivePresenter() {
         };
     }, [presentationId, supabase, router]);
 
+    // 🚨 FIXED: Uses getBoundingClientRect for 1:1 pixel-perfect accuracy
     const handleMouseMove = (e: React.MouseEvent) => {
         const target = e.target as HTMLElement;
         if (target.closest('button')) return;
+        if (!canvasRef.current) return;
 
-        const x = e.clientX / window.innerWidth;
-        const y = e.clientY / window.innerHeight;
+        const rect = canvasRef.current.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
 
         if (tool === 'laser') {
-            drawLaser(e.clientX, e.clientY);
+            drawLaser(e.clientX - rect.left, e.clientY - rect.top);
             channelRef.current?.send({ type: 'broadcast', event: 'laser', payload: { x, y, color } });
         }
         if ((tool === 'pen' || tool === 'highlighter') && isDrawing) {
@@ -161,45 +170,53 @@ export default function TeacherLivePresenter() {
     const startDraw = (e: React.MouseEvent) => {
         const target = e.target as HTMLElement;
         if (target.closest('button')) return;
+        if (!canvasRef.current) return;
+
+        const rect = canvasRef.current.getBoundingClientRect();
+        const normX = (e.clientX - rect.left) / rect.width;
+        const normY = (e.clientY - rect.top) / rect.height;
 
         if (tool === 'pen' || tool === 'highlighter') {
             setIsDrawing(true);
-            const canvas = canvasRef.current;
-            if (!canvas) return;
-
-            const ctx = canvas.getContext('2d');
+            const ctx = canvasRef.current.getContext('2d');
             if (ctx) {
                 ctx.beginPath();
-                ctx.arc(e.clientX, e.clientY, tool === 'highlighter' ? 10 : 3, 0, Math.PI * 2);
+                ctx.arc(e.clientX - rect.left, e.clientY - rect.top, tool === 'highlighter' ? 10 : 3, 0, Math.PI * 2);
                 ctx.fillStyle = color;
                 ctx.globalAlpha = tool === 'highlighter' ? 0.3 : 1.0;
                 ctx.fill();
                 ctx.globalAlpha = 1.0;
             }
 
-            const normX = e.clientX / window.innerWidth;
-            const normY = e.clientY / window.innerHeight;
             prevPointRef.current = { x: normX, y: normY };
             channelRef.current?.send({ type: 'broadcast', event: 'dot', payload: { x: normX, y: normY, color, tool } });
         }
+
         if (tool === 'text') {
-            const text = prompt("Enter text to display:");
-            if (text) {
-                const canvas = canvasRef.current;
-                if (!canvas) return;
-
-                const ctx = canvas.getContext('2d');
-                if (ctx) {
-                    ctx.fillStyle = color;
-                    ctx.font = "bold 40px Arial";
-                    ctx.fillText(text, e.clientX, e.clientY);
-                }
-
-                const normX = e.clientX / window.innerWidth;
-                const normY = e.clientY / window.innerHeight;
-                channelRef.current?.send({ type: 'broadcast', event: 'text', payload: { x: normX, y: normY, text, color } });
-            }
+            // 🚨 Opens the custom text box instead of the ugly prompt()
+            setTextInput({ active: true, x: e.clientX - rect.left, y: e.clientY - rect.top, value: "" });
         }
+    };
+
+    const submitText = () => {
+        if (!textInput || !canvasRef.current || !textInput.value) {
+            setTextInput(null);
+            return;
+        }
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+
+        if (ctx) {
+            ctx.fillStyle = color;
+            ctx.font = "bold 40px Arial";
+            ctx.fillText(textInput.value, textInput.x, textInput.y);
+        }
+
+        const normX = textInput.x / canvas.width;
+        const normY = textInput.y / canvas.height;
+        channelRef.current?.send({ type: 'broadcast', event: 'text', payload: { x: normX, y: normY, text: textInput.value, color } });
+
+        setTextInput(null);
     };
 
     const drawPen = (e: React.MouseEvent) => {
@@ -208,11 +225,12 @@ export default function TeacherLivePresenter() {
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        const x = e.clientX;
-        const y = e.clientY;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
 
-        const normX = x / window.innerWidth;
-        const normY = y / window.innerHeight;
+        const normX = x / rect.width;
+        const normY = y / rect.height;
 
         ctx.lineTo(x, y);
         ctx.strokeStyle = color;
@@ -264,7 +282,7 @@ export default function TeacherLivePresenter() {
     }
 
     const totalSlides = presentation.deck_data?.slides?.length || 1;
-    const colors = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#a855f7"]; // Red, Blue, Green, Yellow, Purple
+    const colors = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#a855f7"];
 
     return (
         <div
@@ -287,7 +305,6 @@ export default function TeacherLivePresenter() {
                     <button onClick={() => setTool('highlighter')} className={`p-2 rounded-lg ${tool === 'highlighter' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><Highlighter size={20} /></button>
                     <button onClick={() => setTool('text')} className={`p-2 rounded-lg ${tool === 'text' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><Type size={20} /></button>
 
-                    {/* Color Picker */}
                     <div className="flex gap-1 ml-2 pl-2 border-l border-white/20">
                         {colors.map(c => (
                             <button key={c} onClick={() => setColor(c)} className={`w-6 h-6 rounded-full border-2 ${color === c ? 'border-white scale-110' : 'border-transparent hover:scale-105'}`} style={{ backgroundColor: c }} />
@@ -308,7 +325,7 @@ export default function TeacherLivePresenter() {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-hidden relative">
+            <div className="flex-1 overflow-hidden relative" ref={containerRef}>
                 <DeckViewer deck={presentation.deck_data} externalSlide={currentSlide} />
 
                 <canvas
@@ -320,26 +337,27 @@ export default function TeacherLivePresenter() {
                     className={`absolute inset-0 z-50 ${tool === 'laser' ? 'cursor-crosshair' : 'pointer-events-none'}`}
                 />
 
-                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-6 bg-black/80 backdrop-blur-xl px-6 py-3 rounded-full border-2 border-white/20 shadow-[0_0_30px_rgba(0,0,0,0.8)]">
-                    <button
-                        onClick={() => handleSlideChange(Math.max(currentSlide - 1, 0))}
-                        disabled={currentSlide === 0}
-                        className="p-2 text-white hover:bg-white/20 rounded-full disabled:opacity-30 transition-all active:scale-90"
-                    >
-                        <ChevronLeft size={32} />
-                    </button>
+                {/* 🚨 CUSTOM TEXT INPUT BOX */}
+                {textInput?.active && (
+                    <div className="absolute z-[9999] flex items-center gap-2 bg-black/80 p-2 rounded-xl border border-white/20 shadow-2xl backdrop-blur-md" style={{ top: textInput.y - 30, left: textInput.x }}>
+                        <input
+                            autoFocus
+                            type="text"
+                            value={textInput.value}
+                            onChange={(e) => setTextInput({ ...textInput, value: e.target.value })}
+                            onKeyDown={(e) => e.key === 'Enter' && submitText()}
+                            className="bg-transparent border-none outline-none text-white font-bold text-lg min-w-[200px]"
+                            placeholder="Type text..."
+                        />
+                        <button onClick={submitText} className="bg-emerald-500 text-white px-3 py-1 rounded font-bold hover:bg-emerald-400">Add</button>
+                        <button onClick={() => setTextInput(null)} className="text-red-400 hover:text-red-300 px-2">X</button>
+                    </div>
+                )}
 
-                    <span className="text-white font-bold text-sm tracking-widest min-w-[60px] text-center">
-                        {currentSlide + 1} / {totalSlides}
-                    </span>
-
-                    <button
-                        onClick={() => handleSlideChange(Math.min(currentSlide + 1, totalSlides - 1))}
-                        disabled={currentSlide === totalSlides - 1}
-                        className="p-2 text-white hover:bg-white/20 rounded-full disabled:opacity-30 transition-all active:scale-90"
-                    >
-                        <ChevronRight size={32} />
-                    </button>
+                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-6 bg-black/80 backdrop-blur-xl px-6 py-3 rounded-full border-2 border-white/20 shadow-[0_0_30px_rgba(0,0,0,0.8)]">
+                    <button onClick={() => handleSlideChange(Math.max(currentSlide - 1, 0))} disabled={currentSlide === 0} className="p-2 text-white hover:bg-white/20 rounded-full disabled:opacity-30 transition-all active:scale-90"><ChevronLeft size={32} /></button>
+                    <span className="text-white font-bold text-sm tracking-widest min-w-[60px] text-center">{currentSlide + 1} / {totalSlides}</span>
+                    <button onClick={() => handleSlideChange(Math.min(currentSlide + 1, totalSlides - 1))} disabled={currentSlide === totalSlides - 1} className="p-2 text-white hover:bg-white/20 rounded-full disabled:opacity-30 transition-all active:scale-90"><ChevronRight size={32} /></button>
                 </div>
             </div>
         </div>
