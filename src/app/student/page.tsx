@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { cookies } from "next/headers";
-import { Gamepad2, Box, BookOpen, Video, LogOut, FileText, Play, Radio, CheckSquare } from "lucide-react";
+import { Gamepad2, Box, BookOpen, Video, LogOut, FileText, Play, Radio, CheckSquare, ClipboardList } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
 import studentBg from "@/pic/100a5ec1-5f72-4fa8-bf39-6a9868de1337.jpg";
@@ -21,7 +21,7 @@ export default async function StudentDashboard() {
         process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const { data: studentData } = await supabaseAdmin.from("children").select("coins, class_name").eq("id", studentId).single();
+    const { data: studentData } = await supabaseAdmin.from("children").select("coins, class_name").eq("id", studentId).maybeSingle();
     const coins = studentData?.coins || 0;
     const className = studentData?.class_name || "KG1";
 
@@ -37,11 +37,15 @@ export default async function StudentDashboard() {
         (p.target_type === 'student' && p.target_value === studentId)
     ) || [];
 
-    // 🚨 Fetch Assignments for this student
+    // Fetch Assignments
     const { data: allAssignments } = await supabaseAdmin.from("assignments").select("*");
     const myAssignments = allAssignments?.filter(a =>
         a.target_grade === className || a.target_student_id === studentId
     ) || [];
+
+    // 🚨 Fetch Submissions (Grades) for the badge count
+    const { data: mySubmissions } = await supabaseAdmin.from("submissions").select("score, teacher_feedback").eq("student_id", studentId);
+    const gradedCount = mySubmissions?.filter(s => s.score !== undefined && s.score !== null).length || 0;
 
     return (
         <div className="min-h-screen relative flex flex-col font-sans pb-12">
@@ -74,7 +78,7 @@ export default async function StudentDashboard() {
                     </div>
                 </nav>
 
-                <main className="flex-1 max-w-6xl w-full mx-auto p-4 md:p-6 mt-6">
+                <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 mt-6">
                     <div className="mb-8 text-center">
                         <h1 className="text-3xl md:text-5xl font-black text-white mb-2 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)]">Welcome, {studentName}!</h1>
                         <p className="text-white text-base md:text-xl font-bold drop-shadow-md bg-black/40 inline-block px-4 py-1 rounded-full">Ready for today's adventure?</p>
@@ -115,24 +119,35 @@ export default async function StudentDashboard() {
                         </div>
                     )}
 
-                    {/* 🚨 4 Main Buttons */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {/* 🚨 5 Main Buttons */}
+                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                         <Link href="/student/avatar" className="bg-slate-900/85 border-2 border-indigo-500/50 p-6 rounded-2xl md:rounded-3xl backdrop-blur-md hover:bg-slate-800/90 transition-all flex flex-col items-center gap-4 text-center">
                             <Box className="w-10 h-10 text-indigo-400 shrink-0" />
                             <h2 className="text-lg md:text-xl font-bold text-white">Avatar Studio</h2>
                         </Link>
+
                         <Link href="/student/games" className="bg-slate-900/85 border-2 border-emerald-500/50 p-6 rounded-2xl md:rounded-3xl backdrop-blur-md hover:bg-slate-800/90 transition-all flex flex-col items-center gap-4 text-center">
                             <Gamepad2 className="w-10 h-10 text-emerald-400 shrink-0" />
                             <h2 className="text-lg md:text-xl font-bold text-white">Arcade Arena</h2>
                         </Link>
 
-                        {/* 🚨 The New Assignments Button */}
                         <Link href="/student/assignments" className="bg-slate-900/85 border-2 border-pink-500/50 p-6 rounded-2xl md:rounded-3xl backdrop-blur-md hover:bg-slate-800/90 transition-all flex flex-col items-center gap-4 text-center relative">
                             <FileText className="w-10 h-10 text-pink-400 shrink-0" />
                             <h2 className="text-lg md:text-xl font-bold text-white">Assignments</h2>
                             {myAssignments.length > 0 && (
                                 <span className="absolute top-2 right-2 bg-pink-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
-                                    {myAssignments.length} New
+                                    {myAssignments.length}
+                                </span>
+                            )}
+                        </Link>
+
+                        {/* 🚨 NEW GRADES BUTTON */}
+                        <Link href="/student/grades" className="bg-slate-900/85 border-2 border-amber-500/50 p-6 rounded-2xl md:rounded-3xl backdrop-blur-md hover:bg-slate-800/90 transition-all flex flex-col items-center gap-4 text-center relative">
+                            <ClipboardList className="w-10 h-10 text-amber-400 shrink-0" />
+                            <h2 className="text-lg md:text-xl font-bold text-white">My Grades</h2>
+                            {gradedCount > 0 && (
+                                <span className="absolute top-2 right-2 bg-amber-500 text-slate-950 text-xs font-bold px-2 py-1 rounded-full shadow-lg">
+                                    {gradedCount}
                                 </span>
                             )}
                         </Link>
