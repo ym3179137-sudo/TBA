@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createAssignment } from "@/app/actions/assignments";
-import { CheckSquare, FileText, Lock, Loader2, ArrowLeft, Plus, Trash2, Save, CheckCircle2 } from "lucide-react";
+import { CheckSquare, FileText, Lock, Loader2, ArrowLeft, Plus, Trash2, Save, CheckCircle2, CheckCircle } from "lucide-react";
 import Link from "next/link";
 
 export default function CreateAssignmentPage() {
@@ -39,10 +39,11 @@ export default function CreateAssignmentPage() {
         setQuestions(questions.filter((_, i) => i !== index));
     };
 
-    const handlePublish = async () => {
+    // 🚨 HANDLE PUBLISH (Takes 'draft' or 'published')
+    const handlePublish = async (status: 'draft' | 'published') => {
         if (!title.trim()) return setError("Title is required.");
-        if (type === 'form' && questions.length === 0) return setError("Add at least one question to the form.");
-        if (type === 'form' && questions.some(q => !q.correctAnswer)) return setError("Please select a correct answer for every question.");
+        if (status === 'published' && type === 'form' && questions.length === 0) return setError("Add at least one question to publish.");
+        if (status === 'published' && type === 'form' && questions.some(q => !q.correctAnswer)) return setError("Please select a correct answer for every question.");
 
         setLoading(true);
         setError(null);
@@ -53,12 +54,13 @@ export default function CreateAssignmentPage() {
                 description: description,
                 type: type,
                 target_grade: targetGrade,
+                status: status, // 🚨 PASS STATUS
                 settings: { lockMode: lockMode, questions: type === 'form' ? questions : [] }
             });
             router.push("/teacher/assignments");
             router.refresh();
         } catch (err: any) {
-            setError(err.message || "Failed to publish assignment.");
+            setError(err.message || "Failed to save assignment.");
             setLoading(false);
         }
     };
@@ -119,7 +121,7 @@ export default function CreateAssignmentPage() {
                             </button>
                         </div>
 
-                        {/* 🚨 QUESTION BUILDER */}
+                        {/* QUESTION BUILDER */}
                         {type === 'form' && (
                             <div className="border-t-2 border-slate-800 pt-8 mt-8">
                                 <h2 className="text-2xl font-bold text-white mb-6">Form Questions</h2>
@@ -133,12 +135,10 @@ export default function CreateAssignmentPage() {
                                                 <input type="text" value={q.label} onChange={(e) => updateQuestion(i, 'label', e.target.value)} className="flex-1 bg-transparent border-b border-slate-700 text-white outline-none focus:border-emerald-500 text-lg font-bold pb-1" />
                                             </div>
 
-                                            {/* Multiple Choice Options */}
                                             {q.type === 'multiple_choice' && (
                                                 <div className="space-y-2 mt-4 pl-4 border-l-2 border-slate-700">
                                                     {q.options?.map((opt: string, optIdx: number) => (
                                                         <div key={optIdx} className="flex items-center gap-3 bg-slate-900 p-2 rounded-lg">
-                                                            {/* Correct Answer Selector */}
                                                             <button onClick={() => updateQuestion(i, 'correctAnswer', opt)} className={`p-1 rounded-full ${q.correctAnswer === opt ? 'text-emerald-400 bg-emerald-500/20' : 'text-slate-600 hover:text-slate-400'}`}>
                                                                 <CheckCircle2 size={20} />
                                                             </button>
@@ -158,7 +158,6 @@ export default function CreateAssignmentPage() {
                                                 </div>
                                             )}
 
-                                            {/* Short/Long Text Correct Answer */}
                                             {(q.type === 'short_text' || q.type === 'long_text') && (
                                                 <div className="mt-4 pl-4">
                                                     <label className="text-xs font-bold text-emerald-400 mb-1 block">Expected Correct Answer</label>
@@ -176,9 +175,23 @@ export default function CreateAssignmentPage() {
                             </div>
                         )}
 
-                        <button onClick={handlePublish} disabled={loading} className="w-full mt-8 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl text-lg flex justify-center items-center gap-3 transition-all disabled:opacity-50 shadow-lg">
-                            {loading ? <><Loader2 className="animate-spin" /> Publishing...</> : <><Save size={22} /> Publish Assignment</>}
-                        </button>
+                        {/* 🚨 DRAFT & PUBLISH BUTTONS */}
+                        <div className="flex gap-4 mt-8 pt-6 border-t border-slate-800">
+                            <button
+                                onClick={() => handlePublish('draft')}
+                                disabled={loading}
+                                className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-4 rounded-xl text-lg flex justify-center items-center gap-2 transition-all"
+                            >
+                                <Save size={20} /> Save as Draft
+                            </button>
+                            <button
+                                onClick={() => handlePublish('published')}
+                                disabled={loading}
+                                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl text-lg flex justify-center items-center gap-2 transition-all shadow-lg"
+                            >
+                                {loading ? <Loader2 className="animate-spin" /> : <><CheckCircle size={20} /> Publish to Class</>}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

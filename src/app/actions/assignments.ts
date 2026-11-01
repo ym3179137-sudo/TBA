@@ -9,6 +9,7 @@ export async function createAssignment(data: {
     type: "doc" | "form";
     target_grade?: string;
     target_student_id?: string;
+    status?: 'draft' | 'published'; // 🚨 ADDED STATUS
     settings: { lockMode?: boolean; questions?: any[] };
 }) {
     const supabase = await createClient();
@@ -32,7 +33,6 @@ export async function createAssignment(data: {
     }
 
     // 🚨 4. LOG THE EVENT: If a Teacher enables Lock Mode, alert the Admin
-    // We wrap this in a try/catch so if it fails, it doesn't stop the assignment from being published
     if (data.settings?.lockMode && profile.role === 'teacher') {
         try {
             await supabase.from("audit_logs").insert({
@@ -47,7 +47,7 @@ export async function createAssignment(data: {
         }
     }
 
-    // 5. Save the assignment to the database
+    // 5. Save the assignment to the database with the Status
     const { data: newAssignment, error } = await supabase
         .from("assignments")
         .insert({
@@ -57,6 +57,7 @@ export async function createAssignment(data: {
             type: data.type,
             target_grade: data.target_grade || null,
             target_student_id: data.target_student_id || null,
+            status: data.status || 'draft', // 🚨 SAVE THE STATUS HERE
             settings: data.settings,
         })
         .select()
@@ -67,7 +68,8 @@ export async function createAssignment(data: {
         throw new Error(error.message);
     }
 
-    // Refresh the teacher's dashboard
+    // Refresh the teacher's pages
     revalidatePath("/teacher/assignments");
+    revalidatePath("/teacher/grades");
     return newAssignment;
 }

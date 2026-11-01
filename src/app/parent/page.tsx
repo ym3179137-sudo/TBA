@@ -20,7 +20,6 @@ export default function ParentPage() {
     const [pin, setPin] = useState("");
     const [loading, setLoading] = useState(false);
 
-    // 🚨 State for the Grade Modal & DB Fetching
     const [selectedChild, setSelectedChild] = useState<any | null>(null);
     const [gradeData, setGradeData] = useState<{ rank: number, total: number, results: any[] } | null>(null);
     const [fetchingGrades, setFetchingGrades] = useState(false);
@@ -85,14 +84,14 @@ export default function ParentPage() {
         router.refresh();
     }
 
-    // 🚨 FETCH REAL GRADES FROM DATABASE
+    // 🚨 FETCH GRADES FROM SUBMISSIONS TABLE
     async function openGradeModal(child: any) {
         setSelectedChild(child);
         setFetchingGrades(true);
         setGradeData(null);
 
         try {
-            // 1. Fetch all students in the same class to calculate rank
+            // Fetch rank
             const { data: classmates } = await supabase
                 .from("children")
                 .select("id, total_points_earned")
@@ -101,31 +100,29 @@ export default function ParentPage() {
 
             let rank = 0;
             let total = classmates?.length || 1;
-
             if (classmates) {
                 const index = classmates.findIndex((c) => c.id === child.id);
                 if (index !== -1) rank = index + 1;
             }
 
-            // 2. Fetch real assessment results for this child
-            // (Adjust 'assessment_results' if your table is named differently)
-            const { data: results, error } = await supabase
-                .from("assessment_results")
+            // Fetch actual submissions
+            const { data: submissions, error } = await supabase
+                .from("submissions")
                 .select(`
                     id,
                     score,
-                    max_score,
+                    integrity_score,
                     teacher_feedback,
-                    created_at,
+                    submitted_at,
                     assignments (title, subject)
                 `)
                 .eq("student_id", child.id)
-                .order("created_at", { ascending: false });
+                .order("submitted_at", { ascending: false });
 
             setGradeData({
                 rank: rank,
                 total: total,
-                results: results || []
+                results: submissions || []
             });
 
         } catch (error) {
@@ -160,7 +157,6 @@ export default function ParentPage() {
 
             <div className="relative z-10 max-w-7xl mx-auto p-8">
                 <div className="grid lg:grid-cols-3 gap-8">
-
                     {/* ADD CHILD FORM */}
                     <div className="lg:col-span-1 bg-slate-900/80 backdrop-blur-xl p-8 rounded-[2rem] border border-slate-800 shadow-2xl h-fit">
                         <h2 className="text-2xl font-extrabold mb-6 flex items-center gap-2 text-white">
@@ -244,15 +240,13 @@ export default function ParentPage() {
                             </div>
                         )}
                     </div>
-
                 </div>
             </div>
 
-            {/* 🚨 REAL GRADE MODAL */}
+            {/* 🚨 GRADE MODAL */}
             {selectedChild && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
                     <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-[2rem] shadow-2xl overflow-hidden relative animate-in fade-in zoom-in duration-200">
-
                         <div className="bg-slate-800/50 p-6 border-b border-slate-700 flex justify-between items-center">
                             <div>
                                 <h2 className="text-2xl font-extrabold text-white">{selectedChild.full_name}'s Report</h2>
@@ -271,7 +265,7 @@ export default function ParentPage() {
                                 </div>
                             ) : (
                                 <>
-                                    {/* 1. Leaderboard Rank */}
+                                    {/* Rank */}
                                     <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 p-6 rounded-2xl flex items-center justify-between">
                                         <div className="flex items-center gap-4">
                                             <div className="w-12 h-12 bg-amber-500/20 rounded-full flex items-center justify-center">
@@ -288,7 +282,7 @@ export default function ParentPage() {
                                         </div>
                                     </div>
 
-                                    {/* 2. Real Assignments & Answers */}
+                                    {/* Assignments */}
                                     <div>
                                         <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
                                             <BookOpen className="w-5 h-5 text-indigo-400" /> Assignment History
@@ -300,38 +294,29 @@ export default function ParentPage() {
                                             </div>
                                         ) : (
                                             <div className="space-y-3">
-                                                {gradeData?.results.map((result: any) => {
-                                                    const percentage = Math.round((result.score / (result.max_score || 100)) * 100);
-                                                    const isPassing = percentage >= 70;
-
-                                                    return (
-                                                        <div key={result.id} className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
-                                                            <div>
-                                                                <p className="font-bold text-white">{result.assignments?.title || "Unknown Assignment"}</p>
-                                                                <p className="text-sm text-slate-400">
-                                                                    {result.assignments?.subject} • {new Date(result.created_at).toLocaleDateString()}
-                                                                </p>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <span className={`font-bold text-lg ${isPassing ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                                                    {percentage}%
-                                                                </span>
-                                                                <p className="text-xs text-slate-500">Score: {result.score}/{result.max_score}</p>
-                                                            </div>
+                                                {gradeData?.results.map((result: any) => (
+                                                    <div key={result.id} className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                                                        <div className="flex justify-between items-center">
+                                                            <p className="font-bold text-white">{result.assignments?.title || "Unknown Assignment"}</p>
+                                                            <span className={`font-bold text-lg ${result.score >= 70 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                                                {result.score || 0}%
+                                                            </span>
                                                         </div>
-                                                    );
-                                                })}
+                                                        <p className="text-sm text-slate-400">Integrity: {result.integrity_score || 100}%</p>
+                                                        {result.teacher_feedback && (
+                                                            <p className="text-sm text-pink-300 mt-2 italic">"{result.teacher_feedback}"</p>
+                                                        )}
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
                                     </div>
 
-                                    {/* 3. Real Teacher Feedback */}
+                                    {/* Teacher Feedback (Bottom) */}
                                     <div>
                                         <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
                                             <MessageSquare className="w-5 h-5 text-pink-400" /> Teacher Feedback
                                         </h3>
-
-                                        {/* Fetch the most recent feedback that isn't empty */}
                                         {(() => {
                                             const latestFeedback = gradeData?.results.find(r => r.teacher_feedback);
                                             if (!latestFeedback) return (
@@ -354,7 +339,6 @@ export default function ParentPage() {
                     </div>
                 </div>
             )}
-
         </div>
     );
 }
