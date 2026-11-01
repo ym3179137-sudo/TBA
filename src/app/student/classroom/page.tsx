@@ -17,7 +17,9 @@ export default function StudentClassroom() {
     const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
-    // Set exact canvas size to match the container
+    // Track previous points for drawing
+    const prevPointRef = useRef<{ x: number, y: number } | null>(null);
+
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
@@ -37,7 +39,6 @@ export default function StudentClassroom() {
         return () => window.removeEventListener('resize', updateSize);
     }, [liveData, currentSlide]);
 
-    // Laser fading effect
     const laserPoints = useRef<{ x: number; y: number; life: number }[]>([]);
     useEffect(() => {
         let animationFrameId: number;
@@ -69,14 +70,12 @@ export default function StudentClassroom() {
     }, []);
 
     useEffect(() => {
-        const getCookie = (name: string) => {
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop()?.split(';').shift();
-            return "";
+        const getStudentData = () => {
+            let id = localStorage.getItem("tba_student_id") || "";
+            let name = localStorage.getItem("tba_student_name") || "Student";
+            return { id, name: decodeURIComponent(name) };
         };
-        const studentId = getCookie("student_id") || "";
-        const studentName = decodeURIComponent(getCookie("student_name") || "Student");
+        const { id: studentId, name: studentName } = getStudentData();
 
         async function checkInitialSession() {
             const { data } = await supabase.from("live_sessions").select("*").eq("is_active", true).order('created_at', { ascending: false }).limit(1);
@@ -105,24 +104,25 @@ export default function StudentClassroom() {
         });
 
         channelRef.current
-            // 🚨 Teacher changed the slide
             .on('broadcast', { event: 'slide_change' }, (payload: any) => {
                 setCurrentSlide(payload.payload.slide);
-                // Clear the drawing canvas when the slide changes
                 const ctx = canvasRef.current?.getContext('2d');
                 if (ctx && canvasRef.current) {
                     ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
                 }
+                prevPointRef.current = null;
             })
-            // 🚨 Teacher moved the laser
             .on('broadcast', { event: 'laser' }, (payload: any) => {
                 laserPoints.current.push({ x: payload.payload.x, y: payload.payload.y, life: 1.0 });
             })
-            // 🚨 Teacher drew a line
+            // 🚨 FIXED: Now draws perfect lines using prevX/prevY
             .on('broadcast', { event: 'draw' }, (payload: any) => {
                 const ctx = canvasRef.current?.getContext('2d');
                 if (ctx && canvasRef.current) {
-                    ctx.lineTo(payload.payload.x * canvasRef.current.width, payload.payload.y * canvasRef.current.height);
+                    const { x, y, prevX, prevY } = payload.payload;
+                    ctx.beginPath();
+                    ctx.moveTo(prevX * canvasRef.current.width, prevY * canvasRef.current.height);
+                    ctx.lineTo(x * canvasRef.current.width, y * canvasRef.current.height);
                     ctx.strokeStyle = "#ef4444";
                     ctx.lineWidth = 4;
                     ctx.lineCap = "round";
@@ -130,19 +130,15 @@ export default function StudentClassroom() {
                     ctx.stroke();
                 }
             })
-            // 🚨 Teacher drew a dot
             .on('broadcast', { event: 'dot' }, (payload: any) => {
                 const ctx = canvasRef.current?.getContext('2d');
                 if (ctx && canvasRef.current) {
                     ctx.beginPath();
-                    ctx.arc(payload.payload.x * canvasRef.current.width, payload.payload.y * canvasRef.current.height, 2, 0, Math.PI * 2);
+                    ctx.arc(payload.payload.x * canvasRef.current.width, payload.payload.y * canvasRef.current.height, 3, 0, Math.PI * 2);
                     ctx.fillStyle = "#ef4444";
                     ctx.fill();
-                    ctx.beginPath();
-                    ctx.moveTo(payload.payload.x * canvasRef.current.width, payload.payload.y * canvasRef.current.height);
                 }
             })
-            // 🚨 Teacher typed text
             .on('broadcast', { event: 'text' }, (payload: any) => {
                 const ctx = canvasRef.current?.getContext('2d');
                 if (ctx && canvasRef.current) {
@@ -151,7 +147,6 @@ export default function StudentClassroom() {
                     ctx.fillText(payload.payload.text, payload.payload.x * canvasRef.current.width, payload.payload.y * canvasRef.current.height);
                 }
             })
-            // 🚨 Teacher cleared the canvas
             .on('broadcast', { event: 'clear' }, () => {
                 const ctx = canvasRef.current?.getContext('2d');
                 if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
@@ -165,14 +160,13 @@ export default function StudentClassroom() {
 
     if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
 
+    // 🚨 THE "MOVIE" VIEW (Full screen, no UI to distract them)
     if (liveData) {
         return (
-            <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden relative">
-                <div className="p-4 bg-emerald-600 text-white flex justify-between items-center z-50">
-                    <div className="flex items-center gap-3 font-bold text-lg">
-                        <span className="relative flex h-3 w-3"><span className="animate-ping absolute h-full w-full rounded-full bg-white opacity-75"></span><span className="relative rounded-full h-3 w-3 bg-white"></span></span>
-                        LIVE CLASS: {liveData.presentation.title}
-                    </div>
+            <div className="h-screen w-screen bg-black flex flex-col overflow-hidden relative">
+                <div className="absolute top-4 left-4 z-50 bg-red-600 text-white px-4 py-2 rounded-full font-bold text-sm flex items-center gap-2 shadow-lg">
+                    <span className="relative flex h-3 w-3"><span className="animate-ping absolute h-full w-full rounded-full bg-white opacity-75"></span><span className="relative rounded-full h-3 w-3 bg-white"></span></span>
+                    LIVE: {liveData.presentation.title}
                 </div>
 
                 <div className="flex-1 overflow-hidden relative" ref={containerRef}>
@@ -180,7 +174,7 @@ export default function StudentClassroom() {
                         <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(liveData.presentation.file_url)}`} className="w-full h-full border-none pointer-events-none" />
                     ) : (
                         <DeckViewer
-                            key={currentSlide} // 🚨 Forces the DeckViewer to completely reload on slide change
+                            key={currentSlide}
                             deck={liveData.presentation.deck_data}
                             externalSlide={currentSlide}
                             onSlideChange={() => { }}
@@ -195,20 +189,19 @@ export default function StudentClassroom() {
         );
     }
 
+    // Inactive screen
     return (
         <div className="min-h-screen bg-slate-950 flex flex-col items-center p-8 font-sans">
-            <div className="w-full max-w-4xl">
-                <Link href="/student" className="inline-flex items-center gap-2 text-slate-400 hover:text-white mb-8 font-bold">
-                    <ArrowLeft size={20} /> Back to Dashboard
-                </Link>
-                <h1 className="text-4xl font-extrabold text-white mb-8">Live Classroom</h1>
-
+            <div className="w-full max-w-4xl mt-20">
                 <div className="bg-slate-900 border border-slate-800 p-16 rounded-3xl text-center shadow-2xl">
                     <Video className="w-20 h-20 text-blue-500 mx-auto mb-6 opacity-50" />
                     <h2 className="text-3xl font-bold text-white mb-4">Class is not in session</h2>
-                    <p className="text-slate-400 text-lg max-w-md mx-auto">
+                    <p className="text-slate-400 text-lg max-w-md mx-auto mb-8">
                         Wait for your teacher to start the live presentation.
                     </p>
+                    <Link href="/student" className="inline-flex items-center gap-2 bg-slate-800 text-white font-bold px-6 py-3 rounded-xl hover:bg-slate-700 transition-all">
+                        <ArrowLeft size={20} /> Back to Dashboard
+                    </Link>
                 </div>
             </div>
         </div>

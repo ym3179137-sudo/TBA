@@ -18,13 +18,14 @@ export default function PlayGame() {
     const [gameMode, setGameMode] = useState("classic");
     const [studentName, setStudentName] = useState("");
     const [studentId, setStudentId] = useState("");
-    const [coinsEarned, setCoinsEarned] = useState(0);
 
     // Store current answers log in a ref so we can access it when game ends
     const answersLogRef = useRef<any[]>([]);
+    const hasJoinedRef = useRef(false); // 🚨 Prevents double joining
 
+    // 🚨 1. JOIN THE LOBBY ONLY ONCE
     useEffect(() => {
-        if (!pin) return;
+        if (!pin || hasJoinedRef.current) return;
 
         const getCookie = (name: string) => {
             const value = `; ${document.cookie}`;
@@ -32,11 +33,25 @@ export default function PlayGame() {
             if (parts.length === 2) return parts.pop()?.split(';').shift();
             return "";
         };
-        const id = getCookie("student_id") || `guest-${Math.random().toString(36).slice(2, 6)}`;
-        const name = decodeURIComponent(getCookie("student_name") || "Guest Player");
+
+        let id = getCookie("student_id");
+        let name = getCookie("student_name");
+
+        // If no cookie exists, generate ONE and save it immediately
+        if (!id) {
+            id = `guest-${Math.random().toString(36).slice(2, 8)}`;
+            document.cookie = `student_id=${id}; path=/; max-age=86400`; // Save for 1 day
+        }
+        if (!name) {
+            name = "Guest Player";
+            document.cookie = `student_name=${encodeURIComponent(name)}; path=/; max-age=86400`;
+        } else {
+            name = decodeURIComponent(name);
+        }
 
         setStudentId(id);
         setStudentName(name);
+        hasJoinedRef.current = true; // Lock it so it never runs again
 
         async function joinLobby() {
             await supabase.from("game_results").upsert({
@@ -44,6 +59,11 @@ export default function PlayGame() {
             }, { onConflict: 'game_pin,student_id' });
         }
         joinLobby();
+    }, [pin, supabase]);
+
+    // 🚨 2. POLL FOR GAME STATUS (Separate from joining)
+    useEffect(() => {
+        if (!pin || !studentId) return;
 
         const interval = setInterval(async () => {
             const { data } = await supabase.from("game_sessions").select("*").eq("pin", pin).single();
@@ -74,8 +94,6 @@ export default function PlayGame() {
     const handleGameEnd = (log: any[]) => {
         answersLogRef.current = log;
     };
-
-    // ... (Keep the rest of the file exactly the same as the previous message) ...
 
     if (status === "lobby") {
         return (
