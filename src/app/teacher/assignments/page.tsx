@@ -3,9 +3,9 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { gradeSubmission, deleteAssignment, deleteSubmission } from "@/app/actions/grading";
-import { FileText, CheckCircle, AlertTriangle, User, Calendar, Share2, ClipboardCheck, Edit3, Save, Trash2, Loader2 } from "lucide-react";
-import BackButton from "@/components/BackButton"; // 🚨 Ensure this import is here
+import { gradeSubmission, deleteAssignment, deleteSubmission, publishAssignment } from "@/app/actions/grading"; // 🚨 Added publishAssignment
+import { FileText, CheckCircle, AlertTriangle, User, Calendar, Share2, ClipboardCheck, Edit3, Save, Trash2, Loader2, Send } from "lucide-react";
+import BackButton from "@/components/BackButton";
 
 export default function TeacherAssessments() {
     const supabase = useMemo(() => createClient(), []);
@@ -69,6 +69,15 @@ export default function TeacherAssessments() {
         setTimeout(() => setCopied(false), 2000);
     };
 
+    const handlePublish = async (id: string) => {
+        if (!confirm("Publish this draft? It will become visible to students immediately.")) return;
+        try {
+            await publishAssignment(id);
+        } catch (err: any) {
+            alert("Failed to publish: " + err.message);
+        }
+    };
+
     const handleDeleteAssignment = async (id: string) => {
         if (!confirm("Are you sure you want to delete this assignment? All student submissions for it will be lost.")) return;
         try {
@@ -114,7 +123,6 @@ export default function TeacherAssessments() {
         <div className="min-h-screen bg-slate-950 text-slate-200 p-8 font-sans">
             <div className="max-w-6xl mx-auto">
 
-                {/* 🚨 SMART BACK BUTTON */}
                 <div className="mb-6">
                     <BackButton fallbackUrl="/teacher" label="Back to Dashboard" />
                 </div>
@@ -150,10 +158,21 @@ export default function TeacherAssessments() {
                                         className={`w-full text-left p-5 rounded-2xl border transition-all pr-12 ${selectedAssignment?.id === assignment.id ? 'bg-slate-800 border-emerald-500' : 'bg-slate-900 border-slate-800 hover:border-slate-600'}`}
                                     >
                                         <h3 className="font-bold text-white text-lg truncate">{assignment.title}</h3>
-                                        <div className="flex items-center gap-3 mt-3 text-xs font-bold text-slate-400">
+                                        <div className="flex items-center gap-2 mt-3 text-xs font-bold text-slate-400">
                                             <span className="bg-slate-950 px-2 py-1 rounded-md">{subCount} Submissions</span>
                                             {assignment.settings?.lockMode && <span className="text-red-400 flex items-center gap-1"><AlertTriangle size={12} /> Locked</span>}
-                                            {assignment.status === 'draft' && <span className="text-amber-400 bg-amber-500/10 px-2 py-1 rounded-md">Draft</span>}
+
+                                            {/* 🚨 DRAFT / PUBLISHED BADGE AND BUTTON */}
+                                            {assignment.status === 'draft' ? (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handlePublish(assignment.id); }}
+                                                    className="text-amber-400 bg-amber-500/10 px-2 py-1 rounded-md flex items-center gap-1 hover:bg-amber-500/20 transition-colors"
+                                                >
+                                                    Draft <Send size={10} />
+                                                </button>
+                                            ) : (
+                                                <span className="text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-md">Published</span>
+                                            )}
                                         </div>
                                     </button>
                                     <button onClick={() => handleDeleteAssignment(assignment.id)} className="absolute top-1/2 -translate-y-1/2 right-4 p-2 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100">
