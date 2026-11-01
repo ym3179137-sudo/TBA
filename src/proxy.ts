@@ -1,30 +1,40 @@
-import { type NextRequest } from "next/server";
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 
-export async function proxy(request: NextRequest) {
-    let response = NextResponse.next({ request });
-    const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-            cookies: {
-                getAll() { return request.cookies.getAll(); },
-                setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-                    cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-                    response = NextResponse.next({ request });
-                    cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
-                },
-            },
+export function proxy(request: NextRequest) {
+    const { pathname } = request.nextUrl
+
+    // 1. Get Auth Cookies (Student uses custom cookie, others use Supabase)
+    const studentId = request.cookies.get('student_id')?.value
+    const tbaAuthCookie = request.cookies.getAll().find(c => c.name.startsWith('sb-')) // Supabase auth token
+
+    // 2. Protect Student Routes
+    if (pathname.startsWith('/student') && pathname !== '/student-login') {
+        if (!studentId) {
+            return NextResponse.redirect(new URL('/student-login', request.url))
         }
-    );
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user && (request.nextUrl.pathname.startsWith('/admin') || request.nextUrl.pathname.startsWith('/dashboard'))) {
-        const url = request.nextUrl.clone();
-        url.pathname = '/sign-in';
-        return NextResponse.redirect(url);
     }
-    return response;
+
+    // 3. Protect Teacher/Admin/Parent Routes
+    const isProtectedRoute =
+        pathname.startsWith('/teacher') ||
+        pathname.startsWith('/admin') ||
+        pathname.startsWith('/parent')
+
+    if (isProtectedRoute) {
+        if (!tbaAuthCookie) {
+            return NextResponse.redirect(new URL('/sign-in', request.url))
+        }
+    }
+
+    return NextResponse.next()
 }
 
-export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'] };
+export const config = {
+    matcher: [
+        '/student/:path*',
+        '/teacher/:path*',
+        '/admin/:path*',
+        '/parent/:path*',
+    ],
+}
