@@ -23,11 +23,7 @@ export default function DeckViewer({ deck, externalSlide }: any) {
     if (!slide) return null;
 
     const layout = slide.layout || "right-image";
-
-    const cleanPrompt = (slide.imagePrompt || slide.heading || "cute cartoon education")
-        .replace(/[^a-zA-Z0-9 ]/g, "")
-        .substring(0, 100);
-
+    const cleanPrompt = (slide.imagePrompt || slide.heading || "cute cartoon education").replace(/[^a-zA-Z0-9 ]/g, "").substring(0, 100);
     const imageUrl = slide.savedImage || `/api/generate-image?prompt=${encodeURIComponent(cleanPrompt)}&seed=${currentSlide}`;
 
     return (
@@ -51,7 +47,6 @@ export default function DeckViewer({ deck, externalSlide }: any) {
                             </li>
                         ))}
                     </ul>
-                    {/* 🚨 The Teacher Prompt block has been completely removed */}
                 </div>
 
                 <div className={`flex-1 w-full max-w-lg relative ${layout === 'centered' ? 'mt-8' : ''}`}>

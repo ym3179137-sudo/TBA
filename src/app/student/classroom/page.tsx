@@ -17,7 +17,6 @@ export default function StudentClassroom() {
     const containerRef = useRef<HTMLDivElement>(null);
     const channelRef = useRef<any>(null);
 
-    // 🚨 FIXED: ResizeObserver ensures canvas matches the screen instantly
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
@@ -32,19 +31,11 @@ export default function StudentClassroom() {
                 }
             }
         };
-
         updateSize();
         const timeoutId = setTimeout(updateSize, 200);
-
         const observer = new ResizeObserver(updateSize);
         if (containerRef.current) observer.observe(containerRef.current);
-        window.addEventListener('resize', updateSize);
-
-        return () => {
-            clearTimeout(timeoutId);
-            observer.disconnect();
-            window.removeEventListener('resize', updateSize);
-        };
+        return () => { clearTimeout(timeoutId); observer.disconnect(); };
     }, [liveData]);
 
     const laserPoints = useRef<{ x: number; y: number; life: number; color: string }[]>([]);
@@ -57,7 +48,7 @@ export default function StudentClassroom() {
                 if (ctx) {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     laserPoints.current.forEach((p) => {
-                        p.life -= 0.03;
+                        p.life -= 0.05; // Faster fade
                         if (p.life > 0) {
                             ctx.beginPath();
                             ctx.arc(p.x * canvas.width, p.y * canvas.height, 8, 0, Math.PI * 2);
@@ -121,9 +112,7 @@ export default function StudentClassroom() {
             .on('broadcast', { event: 'slide_change' }, (payload: any) => {
                 setCurrentSlide(payload.payload.slide);
                 const ctx = canvasRef.current?.getContext('2d');
-                if (ctx && canvasRef.current) {
-                    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                }
+                if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
             })
             .on('broadcast', { event: 'laser' }, (payload: any) => {
                 laserPoints.current.push({ x: payload.payload.x, y: payload.payload.y, life: 1.0, color: payload.payload.color || "#ef4444" });
@@ -137,7 +126,6 @@ export default function StudentClassroom() {
                     ctx.lineTo(x * canvasRef.current.width, y * canvasRef.current.height);
                     ctx.strokeStyle = color || "#ef4444";
                     ctx.lineWidth = 4;
-                    ctx.globalAlpha = 1.0;
                     ctx.lineCap = "round";
                     ctx.lineJoin = "round";
                     ctx.stroke();
@@ -167,10 +155,7 @@ export default function StudentClassroom() {
                 if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
             })
             .subscribe(async (status: string) => {
-                console.log("Student Channel Status:", status);
-                if (status === 'SUBSCRIBED') {
-                    await channelRef.current.track({ role: 'student', name: studentName });
-                }
+                if (status === 'SUBSCRIBED') await channelRef.current.track({ role: 'student', name: studentName });
             });
     }
 
@@ -183,13 +168,8 @@ export default function StudentClassroom() {
                     <span className="relative flex h-3 w-3"><span className="animate-ping absolute h-full w-full rounded-full bg-white opacity-75"></span><span className="relative rounded-full h-3 w-3 bg-white"></span></span>
                     LIVE: {liveData.presentation.title}
                 </div>
-
                 <div className="flex-1 overflow-hidden relative" ref={containerRef}>
-                    <DeckViewer
-                        deck={liveData.presentation.deck_data}
-                        externalSlide={currentSlide}
-                    />
-
+                    <DeckViewer deck={liveData.presentation.deck_data} externalSlide={currentSlide} />
                     <canvas ref={canvasRef} className="absolute inset-0 z-40 pointer-events-none w-full h-full" />
                     <canvas ref={laserCanvasRef} className="absolute inset-0 z-50 pointer-events-none w-full h-full" />
                 </div>
@@ -203,9 +183,7 @@ export default function StudentClassroom() {
                 <div className="bg-slate-900 border border-slate-800 p-16 rounded-3xl text-center shadow-2xl">
                     <Video className="w-20 h-20 text-blue-500 mx-auto mb-6 opacity-50" />
                     <h2 className="text-3xl font-bold text-white mb-4">Class is not in session</h2>
-                    <p className="text-slate-400 text-lg max-w-md mx-auto mb-8">
-                        Wait for your teacher to start the live presentation.
-                    </p>
+                    <p className="text-slate-400 text-lg max-w-md mx-auto mb-8">Wait for your teacher to start the live presentation.</p>
                     <Link href="/student" className="inline-flex items-center gap-2 bg-slate-800 text-white font-bold px-6 py-3 rounded-xl hover:bg-slate-700 transition-all">
                         <ArrowLeft size={20} /> Back to Dashboard
                     </Link>

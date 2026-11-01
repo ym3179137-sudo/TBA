@@ -21,7 +21,6 @@ export default function TeacherLivePresenter() {
     const [color, setColor] = useState("#ef4444");
     const [isDrawing, setIsDrawing] = useState(false);
     const [attendance, setAttendance] = useState<any[]>([]);
-
     const [textInput, setTextInput] = useState<{ active: boolean, x: number, y: number, value: string } | null>(null);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -30,8 +29,22 @@ export default function TeacherLivePresenter() {
     const channelRef = useRef<any>(null);
 
     const prevPointRef = useRef<{ x: number, y: number } | null>(null);
+    const lastEmitRef = useRef<number>(0); // 🚨 Throttling Timer
 
-    // 🚨 FIXED: ResizeObserver ensures canvas matches the screen instantly
+    // Keyboard Navigation
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'ArrowRight') {
+                handleSlideChange(Math.min(currentSlide + 1, (presentation?.deck_data?.slides?.length || 1) - 1));
+            } else if (e.key === 'ArrowLeft') {
+                handleSlideChange(Math.max(currentSlide - 1, 0));
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [currentSlide, presentation]);
+
+    // Canvas Resizing
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
@@ -46,33 +59,18 @@ export default function TeacherLivePresenter() {
                 }
             }
         };
-
         updateSize();
-        const timeoutId = setTimeout(updateSize, 200); // Backup delay for safety
-
+        const timeoutId = setTimeout(updateSize, 200);
         const observer = new ResizeObserver(updateSize);
         if (containerRef.current) observer.observe(containerRef.current);
-        window.addEventListener('resize', updateSize);
 
         return () => {
             clearTimeout(timeoutId);
             observer.disconnect();
-            window.removeEventListener('resize', updateSize);
         };
     }, [presentation]);
 
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'ArrowRight') {
-                handleSlideChange(Math.min(currentSlide + 1, (presentation?.deck_data?.slides?.length || 1) - 1));
-            } else if (e.key === 'ArrowLeft') {
-                handleSlideChange(Math.max(currentSlide - 1, 0));
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [currentSlide, presentation]);
-
+    // Smooth Laser Fade
     useEffect(() => {
         let animationFrameId: number;
         const fade = () => {
@@ -81,7 +79,7 @@ export default function TeacherLivePresenter() {
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
                     ctx.globalCompositeOperation = 'destination-out';
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)'; // Faster fade = smoother
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                     ctx.globalCompositeOperation = 'source-over';
                 }
@@ -101,15 +99,9 @@ export default function TeacherLivePresenter() {
 
             const { data: pres } = await supabase.from("presentations").select("*").eq("id", presentationId).single();
             if (!pres) return router.push("/teacher/library");
-
-            if (pres.file_url) {
-                alert("⚠️ Slide sync and drawing do NOT work with uploaded PowerPoint files.");
-                router.push("/teacher/library");
-                return;
-            }
+            if (pres.file_url) return router.push("/teacher/library");
 
             setPresentation(pres);
-
             await supabase.from("live_sessions").update({ is_active: false }).eq("teacher_id", user.id).eq("is_active", true);
 
             const { data: session } = await supabase.from("live_sessions").insert({
@@ -124,12 +116,10 @@ export default function TeacherLivePresenter() {
 
                 channelRef.current
                     .on('presence', { event: 'sync' }, () => {
-                        const state = channelRef.current.presenceState();
-                        const users = Object.values(state).flat();
-                        const students = users.filter((u: any) => u.role === 'student');
-                        setAttendance(students);
+                        const users = Object.values(channelRef.current.presenceState()).flat();
+                        setAttendance(users.filter((u: any) => u.role === 'student'));
                     })
-                    .subscribe((status: string) => { console.log('Status:', status); });
+                    .subscribe();
             }
             setLoading(false);
         }
@@ -151,7 +141,12 @@ export default function TeacherLivePresenter() {
 
         if (tool === 'laser') {
             drawLaser(e.clientX - rect.left, e.clientY - rect.top);
-            channelRef.current?.send({ type: 'broadcast', event: 'laser', payload: { x, y, color } });
+            // Throttled Laser emit
+            const now = Date.now();
+            if (now - lastEmitRef.current > 30) {
+                channelRef.current?.send({ type: 'broadcast', event: 'laser', payload: { x, y, color } });
+                lastEmitRef.current = now;
+            }
         }
         if (tool === 'pen' && isDrawing) {
             drawPen(e);
@@ -163,7 +158,6 @@ export default function TeacherLivePresenter() {
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-
         ctx.beginPath();
         ctx.arc(x, y, 8, 0, Math.PI * 2);
         ctx.fillStyle = color;
@@ -191,11 +185,9 @@ export default function TeacherLivePresenter() {
                 ctx.fillStyle = color;
                 ctx.fill();
             }
-
             prevPointRef.current = { x: normX, y: normY };
             channelRef.current?.send({ type: 'broadcast', event: 'dot', payload: { x: normX, y: normY, color } });
         }
-
         if (tool === 'text') {
             setTextInput({ active: true, x: e.clientX - rect.left, y: e.clientY - rect.top, value: "" });
         }
@@ -208,17 +200,12 @@ export default function TeacherLivePresenter() {
         }
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
-
         if (ctx) {
             ctx.fillStyle = color;
             ctx.font = "bold 40px Arial";
             ctx.fillText(textInput.value, textInput.x, textInput.y);
         }
-
-        const normX = textInput.x / canvas.width;
-        const normY = textInput.y / canvas.height;
-        channelRef.current?.send({ type: 'broadcast', event: 'text', payload: { x: normX, y: normY, text: textInput.value, color } });
-
+        channelRef.current?.send({ type: 'broadcast', event: 'text', payload: { x: textInput.x / canvas.width, y: textInput.y / canvas.height, text: textInput.value, color } });
         setTextInput(null);
     };
 
@@ -231,24 +218,25 @@ export default function TeacherLivePresenter() {
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
-
         const normX = x / rect.width;
         const normY = y / rect.height;
 
         ctx.lineTo(x, y);
         ctx.strokeStyle = color;
         ctx.lineWidth = 4;
-        ctx.globalAlpha = 1.0;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.stroke();
 
-        if (channelRef.current) {
-            channelRef.current.send({
+        // 🚨 THROTTLED DRAW EMIT (Max 30 frames per second)
+        const now = Date.now();
+        if (now - lastEmitRef.current > 30) {
+            channelRef.current?.send({
                 type: 'broadcast',
                 event: 'draw',
                 payload: { x: normX, y: normY, prevX: prevPointRef.current.x, prevY: prevPointRef.current.y, color }
             });
+            lastEmitRef.current = now;
         }
 
         prevPointRef.current = { x: normX, y: normY };
@@ -279,36 +267,30 @@ export default function TeacherLivePresenter() {
         router.push("/teacher/library");
     };
 
-    if (loading || !presentation) {
-        return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
-    }
+    if (loading || !presentation) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
 
     const totalSlides = presentation.deck_data?.slides?.length || 1;
     const colors = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#a855f7"];
 
     return (
-        <div
-            className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden relative select-none"
-            onMouseMove={handleMouseMove}
-            onMouseDown={startDraw}
-            onMouseUp={stopDraw}
-            onMouseLeave={stopDraw}
-        >
-            <div className="p-4 bg-red-600 text-white flex justify-between items-center relative z-[100]">
+        <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden relative select-none" onMouseMove={handleMouseMove} onMouseDown={startDraw} onMouseUp={stopDraw} onMouseLeave={stopDraw}>
+
+            {/* HEADER */}
+            <div className="p-4 bg-red-600 text-white flex justify-between items-center relative z-[100] shadow-md">
                 <div className="flex items-center gap-3 font-bold text-lg">
                     <span className="relative flex h-3 w-3"><span className="animate-ping absolute h-full w-full rounded-full bg-white opacity-75"></span><span className="relative rounded-full h-3 w-3 bg-white"></span></span>
                     LIVE: {presentation.title}
                 </div>
 
-                <div className="flex gap-2 bg-black/30 p-2 rounded-xl items-center">
-                    <button onClick={() => setTool('none')} className={`p-2 rounded-lg ${tool === 'none' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><MousePointer2 size={20} /></button>
-                    <button onClick={() => setTool('laser')} className={`p-2 rounded-lg ${tool === 'laser' ? 'bg-red-500 text-white' : 'hover:bg-white/20'}`}><div className="w-5 h-5 rounded-full animate-pulse" style={{ backgroundColor: color }} /></button>
-                    <button onClick={() => setTool('pen')} className={`p-2 rounded-lg ${tool === 'pen' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><PenTool size={20} /></button>
-                    <button onClick={() => setTool('text')} className={`p-2 rounded-lg ${tool === 'text' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><Type size={20} /></button>
+                <div className="flex gap-2 bg-black/30 p-2 rounded-xl items-center shadow-inner">
+                    <button onClick={() => setTool('none')} className={`p-2 rounded-lg transition-colors ${tool === 'none' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><MousePointer2 size={20} /></button>
+                    <button onClick={() => setTool('laser')} className={`p-2 rounded-lg transition-colors ${tool === 'laser' ? 'bg-red-500 text-white' : 'hover:bg-white/20'}`}><div className="w-5 h-5 rounded-full animate-pulse" style={{ backgroundColor: color }} /></button>
+                    <button onClick={() => setTool('pen')} className={`p-2 rounded-lg transition-colors ${tool === 'pen' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><PenTool size={20} /></button>
+                    <button onClick={() => setTool('text')} className={`p-2 rounded-lg transition-colors ${tool === 'text' ? 'bg-white text-black' : 'hover:bg-white/20'}`}><Type size={20} /></button>
 
                     <div className="flex gap-1 ml-2 pl-2 border-l border-white/20">
                         {colors.map(c => (
-                            <button key={c} onClick={() => setColor(c)} className={`w-6 h-6 rounded-full border-2 ${color === c ? 'border-white scale-110' : 'border-transparent hover:scale-105'}`} style={{ backgroundColor: c }} />
+                            <button key={c} onClick={() => setColor(c)} className={`w-6 h-6 rounded-full border-2 transition-transform ${color === c ? 'border-white scale-110' : 'border-transparent hover:scale-105'}`} style={{ backgroundColor: c }} />
                         ))}
                     </div>
 
@@ -317,33 +299,27 @@ export default function TeacherLivePresenter() {
                 </div>
 
                 <div className="flex items-center gap-4">
-                    <div className="bg-black/30 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2">
+                    <div className="bg-black/30 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-inner">
                         <Users size={16} /> {attendance.length} Joined
                     </div>
-                    <button onClick={endLiveSession} className="bg-black/30 hover:bg-black/50 px-4 py-2 rounded-xl font-bold flex items-center gap-2">
+                    <button onClick={endLiveSession} className="bg-black/30 hover:bg-black/50 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-colors">
                         <StopCircle size={18} /> End
                     </button>
                 </div>
             </div>
 
+            {/* PRESENTATION */}
             <div className="flex-1 overflow-hidden relative" ref={containerRef}>
                 <DeckViewer deck={presentation.deck_data} externalSlide={currentSlide} />
 
-                <canvas
-                    ref={canvasRef}
-                    className={`absolute inset-0 z-40 ${tool === 'pen' || tool === 'text' ? 'cursor-crosshair' : 'pointer-events-none'}`}
-                />
-                <canvas
-                    ref={laserCanvasRef}
-                    className={`absolute inset-0 z-50 ${tool === 'laser' ? 'cursor-crosshair' : 'pointer-events-none'}`}
-                />
+                <canvas ref={canvasRef} className={`absolute inset-0 z-40 ${tool === 'pen' || tool === 'text' ? 'cursor-crosshair' : 'pointer-events-none'}`} />
+                <canvas ref={laserCanvasRef} className={`absolute inset-0 z-50 ${tool === 'laser' ? 'cursor-crosshair' : 'pointer-events-none'}`} />
 
+                {/* FLOATING TEXT INPUT */}
                 {textInput?.active && (
-                    <div className="absolute z-[9999] flex items-center gap-2 bg-black/80 p-2 rounded-xl border border-white/20 shadow-2xl backdrop-blur-md" style={{ top: textInput.y - 30, left: textInput.x }}>
+                    <div className="absolute z-[9999] flex items-center gap-2 bg-black/90 p-2 rounded-xl border border-white/20 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in duration-200" style={{ top: textInput.y - 30, left: textInput.x }}>
                         <input
-                            autoFocus
-                            type="text"
-                            value={textInput.value}
+                            autoFocus type="text" value={textInput.value}
                             onChange={(e) => setTextInput({ ...textInput, value: e.target.value })}
                             onKeyDown={(e) => e.key === 'Enter' && submitText()}
                             className="bg-transparent border-none outline-none text-white font-bold text-lg min-w-[200px]"
@@ -354,6 +330,7 @@ export default function TeacherLivePresenter() {
                     </div>
                 )}
 
+                {/* BOTTOM NAV */}
                 <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-6 bg-black/80 backdrop-blur-xl px-6 py-3 rounded-full border-2 border-white/20 shadow-[0_0_30px_rgba(0,0,0,0.8)]">
                     <button onClick={() => handleSlideChange(Math.max(currentSlide - 1, 0))} disabled={currentSlide === 0} className="p-2 text-white hover:bg-white/20 rounded-full disabled:opacity-30 transition-all active:scale-90"><ChevronLeft size={32} /></button>
                     <span className="text-white font-bold text-sm tracking-widest min-w-[60px] text-center">{currentSlide + 1} / {totalSlides}</span>
