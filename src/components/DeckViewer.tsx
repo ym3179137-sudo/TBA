@@ -53,12 +53,7 @@ export default function DeckViewer({ deck, externalSlide }: any) {
                         ))}
                     </ul>
 
-                    {slide.teacherPrompt && (
-                        <div className="mt-8 bg-indigo-500/10 border-l-4 border-indigo-500 p-4 rounded-r-xl">
-                            <p className="text-sm font-bold text-indigo-400 uppercase tracking-wider mb-1">Teacher Prompt</p>
-                            <p className="text-indigo-200 italic">"{slide.teacherPrompt}"</p>
-                        </div>
-                    )}
+
                 </div>
 
                 <div className={`flex-1 w-full max-w-lg relative ${layout === 'centered' ? 'mt-8' : ''}`}>

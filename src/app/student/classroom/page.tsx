@@ -126,8 +126,8 @@ export default function StudentClassroom() {
                     ctx.lineTo(x * canvasRef.current.width, y * canvasRef.current.height);
                     ctx.strokeStyle = color || "#ef4444";
                     // 🚨 THINNER HIGHLIGHTER LINE
-                    ctx.lineWidth = tool === 'highlighter' ? 6 : 4;
-                    ctx.globalAlpha = tool === 'highlighter' ? 0.2 : 1.0;
+                    ctx.lineWidth = tool === 'highlighter' ? 8 : 8;
+                    ctx.globalAlpha = tool === 'highlighter' ? 0.001 : 0.95;
                     ctx.lineCap = "round";
                     ctx.lineJoin = "round";
                     ctx.stroke();
