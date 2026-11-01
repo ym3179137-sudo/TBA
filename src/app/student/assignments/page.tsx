@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ArrowLeft, FileText, CheckCircle, Clock, Lock, Loader2 } from "lucide-react";
 
@@ -9,6 +10,7 @@ export default function StudentAssignments() {
     const [assignments, setAssignments] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const supabase = createClient();
+    const router = useRouter();
 
     useEffect(() => {
         async function fetchAssignments() {
@@ -18,31 +20,27 @@ export default function StudentAssignments() {
                 if (parts.length === 2) return parts.pop()?.split(';').shift();
                 return "";
             };
-            const studentId = getCookie("student_id") || localStorage.getItem("tba_student_id") || "";
+            const studentId = getCookie("student_id") || "";
 
-            // 1. Get the student's real class from the database (if they are a real student)
-            let studentClass = "KG1";
-            if (studentId && !studentId.startsWith("guest-")) {
-                const { data: child } = await supabase.from("children").select("class_name").eq("id", studentId).maybeSingle();
-                if (child?.class_name) studentClass = child.class_name;
+            // 🚨 FORCE LOGIN: Kick guests out
+            if (!studentId || studentId.startsWith("guest-")) {
+                router.push("/student-login");
+                return;
             }
 
-            // 2. Fetch assignments
+            let studentClass = "KG1";
+            const { data: child } = await supabase.from("children").select("class_name").eq("id", studentId).maybeSingle();
+            if (child?.class_name) studentClass = child.class_name;
+
             const { data: allAssignments } = await supabase.from("assignments").select("*").order("created_at", { ascending: false });
 
-            // 3. Safely fetch submissions ONLY if the ID is a valid UUID (prevents 400 error)
             let completedIds: string[] = [];
-            if (studentId && studentId.length > 20) { // Simple check if it's a real UUID
+            if (studentId.length > 20) {
                 const { data: mySubmissions } = await supabase.from("submissions").select("assignment_id").eq("student_id", studentId);
                 if (mySubmissions) completedIds = mySubmissions.map(s => s.assignment_id);
             }
 
-            // 4. Filter assignments
             const filtered = allAssignments?.filter(a => {
-                // If guest, show everything so you can test it!
-                if (studentId.startsWith("guest-")) return true;
-
-                // Otherwise, show only their grade or directly assigned to them
                 return a.target_grade === studentClass || a.target_student_id === studentId;
             }).map(a => ({
                 ...a,
@@ -53,7 +51,7 @@ export default function StudentAssignments() {
             setLoading(false);
         }
         fetchAssignments();
-    }, [supabase]);
+    }, [supabase, router]);
 
     if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
 

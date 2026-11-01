@@ -23,12 +23,26 @@ export default function TakeAssignment() {
 
     useEffect(() => {
         async function fetchAssignment() {
+            const getCookie = (name: string) => {
+                const value = `; ${document.cookie}`;
+                const parts = value.split(`; ${name}=`);
+                if (parts.length === 2) return parts.pop()?.split(';').shift();
+                return "";
+            };
+            const studentId = getCookie("student_id") || "";
+
+            // 🚨 FORCE LOGIN: Kick guests out
+            if (!studentId || studentId.startsWith("guest-")) {
+                router.push("/student-login");
+                return;
+            }
+
             const { data } = await supabase.from("assignments").select("*").eq("id", assignmentId).maybeSingle();
             if (data) setAssignment(data);
             setLoading(false);
         }
         fetchAssignment();
-    }, [assignmentId, supabase]);
+    }, [assignmentId, supabase, router]);
 
     // 🚨 ANTI-CHEAT: Kicks them out if Lock Mode is on
     useEffect(() => {
@@ -40,10 +54,9 @@ export default function TakeAssignment() {
                 setViolations(newViolations);
                 setShowViolationWarning(true);
 
-                // If they leave 3 times, auto-fail and submit
                 if (newViolations.length >= 3) {
                     alert("❌ QUIZ FAILED: You left the tab 3 times. Submitting your current answers now.");
-                    handleSubmit(true); // Force submit
+                    handleSubmit(true);
                 }
             }
         };
@@ -60,7 +73,7 @@ export default function TakeAssignment() {
             if (parts.length === 2) return parts.pop()?.split(';').shift();
             return "";
         };
-        const studentId = getCookie("student_id") || localStorage.getItem("tba_student_id") || "guest-unknown";
+        const studentId = getCookie("student_id") || "";
 
         try {
             await submitAssignment({
@@ -72,7 +85,10 @@ export default function TakeAssignment() {
             });
             setCompleted(true);
         } catch (err: any) {
-            alert("Failed to submit: " + err.message);
+            alert("❌ Submission Rejected: " + err.message);
+            if (err.message.includes("logged in")) {
+                router.push("/student-login");
+            }
             setSubmitting(false);
         }
     };
@@ -99,7 +115,6 @@ export default function TakeAssignment() {
 
     return (
         <div className="min-h-screen bg-slate-950 p-8 flex flex-col items-center">
-            {/* ANTI-CHEAT WARNING POPUP */}
             {showViolationWarning && !completed && (
                 <div className="fixed inset-0 z-50 bg-red-950/90 flex items-center justify-center backdrop-blur-md p-4">
                     <div className="bg-black border-2 border-red-500 p-8 rounded-3xl max-w-md text-center">
