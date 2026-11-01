@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, ArrowRight, Loader2, ImageOff } from "lucide-react";
+import { Loader2, ImageOff } from "lucide-react";
 
-export default function DeckViewer({ deck, externalSlide, onSlideChange, isStudentView }: any) {
+export default function DeckViewer({ deck, externalSlide }: any) {
     const [currentSlide, setCurrentSlide] = useState(externalSlide || 0);
     const [imgLoading, setImgLoading] = useState(true);
     const [imgError, setImgError] = useState(false);
 
+    // Listen to the teacher's slide changes
     useEffect(() => {
         if (externalSlide !== undefined && externalSlide !== currentSlide) {
             setCurrentSlide(externalSlide);
@@ -18,28 +19,6 @@ export default function DeckViewer({ deck, externalSlide, onSlideChange, isStude
         setImgLoading(true);
         setImgError(false);
     }, [currentSlide]);
-
-    const changeSlide = (newIndex: number) => {
-        if (isStudentView) return;
-        setCurrentSlide(newIndex);
-        if (onSlideChange) onSlideChange(newIndex);
-    };
-
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (isStudentView) return;
-
-            if (e.key === "ArrowRight" || e.key === " ") {
-                e.preventDefault();
-                changeSlide(Math.min(currentSlide + 1, deck.slides.length - 1));
-            } else if (e.key === "ArrowLeft") {
-                e.preventDefault();
-                changeSlide(Math.max(currentSlide - 1, 0));
-            }
-        };
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [currentSlide, deck.slides.length, isStudentView]);
 
     const slide = deck.slides[currentSlide];
     if (!slide) return null;
@@ -110,37 +89,6 @@ export default function DeckViewer({ deck, externalSlide, onSlideChange, isStude
                     </div>
                 </div>
             </div>
-
-            {/* 🚨 NAVIGATION BUTTONS - NOW AT Z-INDEX 100 SO THEY ARE CLICKABLE */}
-            {!isStudentView && (
-                <div className="p-6 bg-slate-900/50 backdrop-blur-md border-t border-slate-800 flex justify-between items-center relative z-[100] pointer-events-auto">
-                    <div className="flex gap-2">
-                        {deck.slides.map((_: any, i: number) => (
-                            <div key={i} className={`h-2 rounded-full transition-all duration-300 ${i === currentSlide ? 'w-8 bg-emerald-500' : 'w-2 bg-slate-700'}`} />
-                        ))}
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                        <button
-                            onClick={() => changeSlide(Math.max(currentSlide - 1, 0))}
-                            disabled={currentSlide === 0}
-                            className="p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-30 transition-all active:scale-95"
-                        >
-                            <ArrowLeft className="w-5 h-5" />
-                        </button>
-                        <span className="font-bold text-sm text-slate-400">
-                            {currentSlide + 1} / {deck.slides.length}
-                        </span>
-                        <button
-                            onClick={() => changeSlide(Math.min(currentSlide + 1, deck.slides.length - 1))}
-                            disabled={currentSlide === deck.slides.length - 1}
-                            className="p-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-30 shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
-                        >
-                            <ArrowRight className="w-5 h-5" />
-                        </button>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

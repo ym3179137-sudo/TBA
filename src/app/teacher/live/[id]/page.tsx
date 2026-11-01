@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import DeckViewer from "@/components/DeckViewer";
-import { StopCircle, Loader2, MousePointer2, PenTool, Trash2, Type, Users } from "lucide-react";
+import { StopCircle, Loader2, MousePointer2, PenTool, Trash2, Type, Users, ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function TeacherLivePresenter() {
     const router = useRouter();
@@ -28,7 +28,7 @@ export default function TeacherLivePresenter() {
 
     const prevPointRef = useRef<{ x: number, y: number } | null>(null);
 
-    // Fix canvas sizing so it perfectly matches the container
+    // Fix canvas sizing
     useEffect(() => {
         const updateSize = () => {
             if (containerRef.current) {
@@ -79,7 +79,6 @@ export default function TeacherLivePresenter() {
             if (!pres) return router.push("/teacher/library");
 
             // 🚨 CHECK: If it's an uploaded PowerPoint, stop them! 
-            // The Microsoft iframe breaks slide syncing and drawing.
             if (pres.file_url) {
                 alert("⚠️ Slide sync and drawing do NOT work with uploaded PowerPoint files. Please use an AI-generated presentation to go live.");
                 router.push("/teacher/library");
@@ -122,7 +121,7 @@ export default function TeacherLivePresenter() {
 
     const handleMouseMove = (e: React.MouseEvent) => {
         const target = e.target as HTMLElement;
-        if (target.closest('button')) return; // Don't draw when hovering over buttons
+        if (target.closest('button')) return;
 
         const rect = e.currentTarget.getBoundingClientRect();
         const x = (e.clientX - rect.left) / rect.width;
@@ -154,7 +153,7 @@ export default function TeacherLivePresenter() {
 
     const startDraw = (e: React.MouseEvent) => {
         const target = e.target as HTMLElement;
-        if (target.closest('button')) return; // 🚨 IGNORE CLICKS ON BUTTONS! This fixes the Next button!
+        if (target.closest('button')) return;
 
         if (tool === 'pen') {
             setIsDrawing(true);
@@ -255,6 +254,8 @@ export default function TeacherLivePresenter() {
         return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
     }
 
+    const totalSlides = presentation.deck_data?.slides?.length || 1;
+
     return (
         <div
             className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden relative select-none"
@@ -263,7 +264,7 @@ export default function TeacherLivePresenter() {
             onMouseUp={stopDraw}
             onMouseLeave={stopDraw}
         >
-            {/* TOP TOOLBAR (Z-index 100 so it sits above the canvas) */}
+            {/* TOP TOOLBAR */}
             <div className="p-4 bg-red-600 text-white flex justify-between items-center relative z-[100]">
                 <div className="flex items-center gap-3 font-bold text-lg">
                     <span className="relative flex h-3 w-3"><span className="animate-ping absolute h-full w-full rounded-full bg-white opacity-75"></span><span className="relative rounded-full h-3 w-3 bg-white"></span></span>
@@ -288,10 +289,11 @@ export default function TeacherLivePresenter() {
                 </div>
             </div>
 
+            {/* MAIN PRESENTATION AREA */}
             <div className="flex-1 overflow-hidden relative" ref={containerRef}>
-                {/* Since we blocked file_url above, this will always render the DeckViewer now! */}
-                <DeckViewer deck={presentation.deck_data} externalSlide={currentSlide} onSlideChange={handleSlideChange} />
+                <DeckViewer deck={presentation.deck_data} externalSlide={currentSlide} />
 
+                {/* DRAWING CANVASES */}
                 <canvas
                     ref={canvasRef}
                     className={`absolute inset-0 z-40 ${tool === 'pen' || tool === 'text' ? 'cursor-crosshair' : 'pointer-events-none'}`}
@@ -300,6 +302,29 @@ export default function TeacherLivePresenter() {
                     ref={laserCanvasRef}
                     className={`absolute inset-0 z-50 ${tool === 'laser' ? 'cursor-crosshair' : 'pointer-events-none'}`}
                 />
+
+                {/* 🚨 CUSTOM FLOATING PRESENTATION CONTROLS (Z-9999) 🚨 */}
+                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-6 bg-black/80 backdrop-blur-xl px-6 py-3 rounded-full border-2 border-white/20 shadow-[0_0_30px_rgba(0,0,0,0.8)]">
+                    <button
+                        onClick={() => handleSlideChange(Math.max(currentSlide - 1, 0))}
+                        disabled={currentSlide === 0}
+                        className="p-2 text-white hover:bg-white/20 rounded-full disabled:opacity-30 transition-all active:scale-90"
+                    >
+                        <ChevronLeft size={32} />
+                    </button>
+
+                    <span className="text-white font-bold text-sm tracking-widest min-w-[60px] text-center">
+                        {currentSlide + 1} / {totalSlides}
+                    </span>
+
+                    <button
+                        onClick={() => handleSlideChange(Math.min(currentSlide + 1, totalSlides - 1))}
+                        disabled={currentSlide === totalSlides - 1}
+                        className="p-2 text-white hover:bg-white/20 rounded-full disabled:opacity-30 transition-all active:scale-90"
+                    >
+                        <ChevronRight size={32} />
+                    </button>
+                </div>
             </div>
         </div>
     );
